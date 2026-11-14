@@ -1,0 +1,5 @@
+# Ajouter les dépendances au fur et à mesure (une ligne par paquet)
+python-dotenv
+mcp
+google-api-python-client
+google-auth-oauthlib

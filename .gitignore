@@ -1,0 +1,25 @@
+# Secrets — ne JAMAIS commiter
+.env
+credentials.json
+client_secret*.json
+token*.json
+*.pem
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.ipynb_checkpoints/
+.pytest_cache/
+
+# Données générées (la base se recrée avec data/create_catalogue.py)
+*.db
+*.sqlite
+*.sqlite3
+
+# Éditeurs / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
