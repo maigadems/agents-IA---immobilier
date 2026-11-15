@@ -39,6 +39,7 @@ def _bien_resume(r: sqlite3.Row) -> dict:
 def creer_serveur(host: str = "127.0.0.1", port: int = 8000) -> FastMCP:
     mcp = FastMCP("catalogue-sama-ker", host=host, port=port)
 
+    # outils rechercher_biens 
     @mcp.tool()
     def rechercher_biens(
         quartier: str | None = None,
@@ -74,7 +75,7 @@ def creer_serveur(host: str = "127.0.0.1", port: int = 8000) -> FastMCP:
         sql, params = "SELECT * FROM biens WHERE 1=1", []
         if quartier:
             sql += " AND quartier_norm LIKE ?"
-            params.append(f"%{norm(quartier)}%")
+            params.append(f"%{norme(quartier)}%")
         if type_bien:
             sql += " AND type_bien = ?"
             params.append(type_bien)
@@ -97,7 +98,7 @@ def creer_serveur(host: str = "127.0.0.1", port: int = 8000) -> FastMCP:
             sql += " AND disponibilite = 'disponible'"
         sql += " ORDER BY loyer_fcfa ASC LIMIT ?"
         params.append(limite)
-        with _con() as con:
+        with _connection() as con:
             lignes = con.execute(sql, params).fetchall()
             biens = [_bien_resume(r) for r in lignes]
             if biens:
@@ -109,3 +110,53 @@ def creer_serveur(host: str = "127.0.0.1", port: int = 8000) -> FastMCP:
             "message": "Aucun bien ne correspond a ces criteres. Ne propose aucun bien.",
             "quartiers_avec_biens_disponibles": zones,
         }
+        
+    # outils detail_bien 
+    @mcp.tool()
+    def detail_bien(bien_id: str) -> dict:
+        """Fiche complete d'un bien a partir de son identifiant (format "SK-007").
+
+        Renvoie l'adresse, le loyer, les charges, la caution (2 mois de loyer), la surface,
+        les equipements, la disponibilite et le conseiller responsable des visites.
+        """
+        bien_id = bien_id.strip().upper()
+        with _connection() as con:
+            r = con.execute("SELECT * FROM biens WHERE id = ?", (bien_id,)).fetchone()
+        if r is None:
+            raise ValueError(f"Aucun bien avec l'identifiant {bien_id}. Les identifiants vont de SK-001 a SK-030.")
+        fiche = _bien_resume(r)
+        fiche.update(
+            {
+                "adresse": r["adresse"],
+                "equipements": r["equipements"].split(","),
+                "caution_fcfa": 2 * r["loyer_fcfa"],
+                "total_mensuel_fcfa": r["loyer_fcfa"] + r["charges_fcfa"],
+            }
+        )
+        return fiche
+
+    def _infos() -> dict:
+        with _connection() as con:
+            return json.loads(con.execute("SELECT valeur FROM agence WHERE cle='infos'").fetchone()[0])
+
+    @mcp.tool()
+    def infos_agence() -> dict:
+        """Informations generales sur l'agence : horaires de visite, zones couvertes, conditions de location."""
+        return _infos()
+
+    @mcp.resource("agence://infos", mime_type="application/json")
+    def ressource_agence() -> str:
+        """Description de l'agence : horaires de visite, zones couvertes, conditions de location."""
+        return json.dumps(_infos(), ensure_ascii=False, indent=2)
+
+    return mcp
+
+
+if __name__ == "__main__":
+    p = argparse.ArgumentParser()
+    p.add_argument("--transport", choices=["stdio", "http"], default="stdio")
+    p.add_argument("--host", default="127.0.0.1")
+    p.add_argument("--port", type=int, default=8000)
+    a = p.parse_args()
+    serveur = creer_serveur(a.host, a.port)
+    serveur.run(transport="stdio" if a.transport == "stdio" else "streamable-http")
