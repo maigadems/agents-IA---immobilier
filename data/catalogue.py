@@ -1,4 +1,8 @@
 import sqlite3
+from pathlib import Path
+
+DB_DEFAUT = Path(__file__).parent / "data" / "catalogue.db"
+CONSEILLERS = ["Awa Diop", "Moussa Ndiaye", "Fatou Sow"]
 
 # les biens
 # type, quartier, adresse, pieces, surface_m2, loyer, charges, meuble, dispo, conseiller(1-3), equipements
@@ -34,3 +38,23 @@ BIENS = [
     ("appartement", "Sicap Liberte", "Sicap Liberte 4", 3, 82, 330000, 20000, 0, "disponible", 1, "climatisation,gardien"),
     ("appartement", "Medina", "Rue 11 x Blaise Diagne, Medina", 2, 48, 150000, 5000, 0, "disponible", 3, "chauffe-eau"),
 ]
+# les informationsde l'agence
+INFOS_AGENCE = {
+    "nom": "Sama Ker Immobilier",
+    "ville": "Dakar",
+    "type_activite": "Location uniquement (pas de vente).",
+    "horaires_visite": "Du lundi au samedi, de 9h a 18h (fuseau Africa/Dakar). Une visite dure 45 minutes. Pas de visite le dimanche.",
+    "zones_couvertes": ["Mermoz", "Ouakam", "Almadies", "Sacre-Coeur", "Point E", "Fann", "Plateau",
+                        "Liberte 6", "Sicap Liberte", "Mamelles", "Yoff", "Ngor", "Parcelles Assainies",
+                        "Rufisque", "Medina"],
+    "conditions_location": {
+        "caution": "2 mois de loyer",
+        "avance": "1 mois de loyer",
+        "frais_agence": "1 mois de loyer, une seule fois a la signature",
+        "pieces_a_fournir": "Piece d'identite, justificatif de revenus ou contrat de travail",
+        "duree_bail": "1 an renouvelable",
+        "remarque": "Le loyer affiche est mensuel, en F CFA. Les charges sont en plus du loyer.",
+    },
+    "conseillers": CONSEILLERS,
+    "hors_perimetre": "Reclamations, negociation de loyer et litiges sont traites uniquement par un conseiller humain.",
+}
