@@ -1,8 +1,17 @@
 import sqlite3
 from pathlib import Path
+import sys
+import unicodedata
+import json
 
 DB_DEFAUT = Path(__file__).parent / "data" / "catalogue.db"
 CONSEILLERS = ["Awa Diop", "Moussa Ndiaye", "Fatou Sow"]
+
+def norme(s: str) -> str:
+    "minuscules sans accents, pour des recherches tolerantes."
+    s = unicodedata.normalize("NFD", s.lower())
+    return "".join(c for c in s if unicodedata.category(c) != "Mn").replace("-", " ").strip()
+
 
 # les biens
 # type, quartier, adresse, pieces, surface_m2, loyer, charges, meuble, dispo, conseiller(1-3), equipements
@@ -58,3 +67,47 @@ INFOS_AGENCE = {
     "conseillers": CONSEILLERS,
     "hors_perimetre": "Reclamations, negociation de loyer et litiges sont traites uniquement par un conseiller humain.",
 }
+
+# creer la base de donnees sqlite
+def creer(db_path: Path = DB_DEFAUT) -> Path:
+    db_path = Path(db_path)
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    if db_path.exists():
+        db_path.unlink()
+    con = sqlite3.connect(db_path)
+    con.executescript(
+        """
+        CREATE TABLE biens (
+            id TEXT PRIMARY KEY,
+            type_bien TEXT NOT NULL CHECK (type_bien IN ('appartement','studio','villa','duplex')),
+            quartier TEXT NOT NULL,
+            quartier_norm TEXT NOT NULL,
+            adresse TEXT NOT NULL,
+            pieces INTEGER NOT NULL,
+            surface_m2 INTEGER NOT NULL,
+            loyer_fcfa INTEGER NOT NULL,
+            charges_fcfa INTEGER NOT NULL,
+            meuble INTEGER NOT NULL,
+            disponibilite TEXT NOT NULL CHECK (disponibilite IN ('disponible','reserve','loue')),
+            conseiller TEXT NOT NULL,
+            equipements TEXT NOT NULL
+        );
+        CREATE INDEX idx_biens_quartier ON biens(quartier_norm);
+        CREATE INDEX idx_biens_loyer ON biens(loyer_fcfa);
+        CREATE TABLE agence (cle TEXT PRIMARY KEY, valeur TEXT);
+        """
+    )
+    for i, (t, q, adr, p, s, loyer, ch, m, dispo, c, eq) in enumerate(BIENS, start=1):
+        con.execute(
+            "INSERT INTO biens VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (f"SK-{i:03d}", t, q, norme(q), adr, p, s, loyer, ch, m, dispo, CONSEILLERS[c], eq),
+        )
+    con.execute("INSERT INTO agence VALUES ('infos', ?)", (json.dumps(INFOS_AGENCE, ensure_ascii=False),))
+    con.commit()
+    con.close()
+    return db_path
+
+
+if __name__ == "__main__":
+    chemin = creer(Path(sys.argv[1]) if len(sys.argv) > 1 else DB_DEFAUT)
+    print(f"Catalogue cree : {chemin} ({len(BIENS)} biens)")
