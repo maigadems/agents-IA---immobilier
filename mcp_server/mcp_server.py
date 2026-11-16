@@ -8,7 +8,7 @@ from typing import Literal
 from mcp.server.fastmcp import FastMCP 
 
 sys.path.insert(0, str(Path(__file__).parent))
-from data.catalogue import DB_DEFAUT, creer, norme
+from catalogue import DB_DEFAUT, creer, norme
 
 
 DB_PATH = Path(os.getenv("CATALOGUE_DB", DB_DEFAUT))

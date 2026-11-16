@@ -1,5 +1,6 @@
 # Ajouter les dépendances au fur et à mesure (une ligne par paquet)
 python-dotenv
-mcp
+mcp>=1.9
 google-api-python-client
-google-auth-oauthlib
+google-auth-oauthlib 
+pydantic-ai-slim[openai,mcp]>=1.0
