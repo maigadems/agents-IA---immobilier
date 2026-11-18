@@ -8,10 +8,13 @@ from typing import Literal
 from mcp.server.fastmcp import FastMCP 
 
 sys.path.insert(0, str(Path(__file__).parent))
-from catalogue import DB_DEFAUT, creer, norme
+from catalogue import DB_DEFAUT, RACINE, creer, norme
 
 
-DB_PATH = Path(os.getenv("CATALOGUE_DB", DB_DEFAUT))
+# chemin de la base : variable CATALOGUE_DB_PATH (voir .env.example), relatif a la racine du depot
+DB_PATH = Path(os.getenv("CATALOGUE_DB_PATH", DB_DEFAUT))
+if not DB_PATH.is_absolute():
+    DB_PATH = RACINE / DB_PATH
 LIMITE_MAX = 10
 
 # connection avec le catalogue

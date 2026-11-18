@@ -30,8 +30,8 @@ Email client ──► Agent (modèle + boucle + état) ──► Serveur MCP ca
 ## Structure du dépôt
 
 ```
-mcp_server/   Serveur MCP du catalogue (FastMCP)            — Partie 1
-data/         Script de création de la base SQLite (30 biens) — Partie 1
+mcp_server/   Serveur MCP + script du catalogue (30 biens)   — Partie 1
+data/         Base SQLite générée (non versionnée)           — Partie 1
 agent/        Boucle de l'agent, prompt système              — Parties 1 puis 3
 agent/tools/  calendar.py, gmail.py, validation humaine      — Partie 2
 evaluation/   15 emails de test, résultats attendus, script  — Partie 3
@@ -56,8 +56,9 @@ Identifiants Google (compte de test de l'atelier uniquement) : placer
 > À compléter par chaque partie au fil des exercices.
 
 ```bash
-python data/create_catalogue.py      # crée data/catalogue.db
-python -m mcp_server.server          # démarre le serveur MCP
+python mcp_server/catalogue.py                         # crée data/catalogue.db (auto au 1er appel sinon)
+python mcp_server/mcp_server.py                        # serveur MCP en stdio
+python mcp_server/mcp_server.py --transport http       # serveur MCP en HTTP : http://127.0.0.1:8000/mcp
 python -m agent.main                 # lance l'agent
 python evaluation/run_eval.py        # rejoue le jeu de test
 ```
