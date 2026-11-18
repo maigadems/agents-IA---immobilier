@@ -46,8 +46,13 @@ ouvrir une **Pull Request** vers `main` sur GitHub → le tech lead relit et fus
 
 Pour travailler en parallèle sans s'attendre, on fixe les interfaces dès maintenant :
 
-- **Catalogue (P1)** — outils MCP `rechercher_biens(type, quartier, loyer_max, pieces)`
-  et `detail_bien(bien_id)`, retour en dict JSON, erreurs `{"erreur": "..."}`.
+- **Catalogue (P1)** — serveur MCP `catalogue-sama-ker` ([mcp_server/mcp_server.py](mcp_server/mcp_server.py)) :
+  - `rechercher_biens(quartier, type_bien, pieces_min, pieces_max, loyer_min_fcfa,
+    loyer_max_fcfa, meuble, disponible_seulement=True, limite=5)` — tous optionnels,
+    renvoie `{"nombre", "biens", "message"}` ; `biens` vide = ne proposer aucun bien ;
+  - `detail_bien(bien_id)` — identifiant `SK-001` à `SK-030`, renvoie la fiche avec l'adresse ;
+  - `infos_agence()` et la ressource `agence://infos` — horaires, zones, conditions ;
+  - erreurs : l'outil lève une erreur MCP avec un message explicite.
 - **Calendar (P2)** — `lister_creneaux_libres(debut, fin)`, `creer_visite(...)`,
   `deplacer_visite(...)`, `annuler_visite(event_id)`.
 - **Gmail (P2)** — `lire_demandes()`, `creer_brouillon(thread_id, texte)`,

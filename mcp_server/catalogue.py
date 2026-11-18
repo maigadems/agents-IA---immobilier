@@ -4,7 +4,8 @@ import sys
 import unicodedata
 import json
 
-DB_DEFAUT = Path(__file__).parent / "data" / "catalogue.db"
+RACINE = Path(__file__).resolve().parent.parent
+DB_DEFAUT = RACINE / "data" / "catalogue.db"
 CONSEILLERS = ["Awa Diop", "Moussa Ndiaye", "Fatou Sow"]
 
 def norme(s: str) -> str:
@@ -100,7 +101,7 @@ def creer(db_path: Path = DB_DEFAUT) -> Path:
     for i, (t, q, adr, p, s, loyer, ch, m, dispo, c, eq) in enumerate(BIENS, start=1):
         con.execute(
             "INSERT INTO biens VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            (f"SK-{i:03d}", t, q, norme(q), adr, p, s, loyer, ch, m, dispo, CONSEILLERS[c], eq),
+            (f"SK-{i:03d}", t, q, norme(q), adr, p, s, loyer, ch, m, dispo, CONSEILLERS[c - 1], eq),
         )
     con.execute("INSERT INTO agence VALUES ('infos', ?)", (json.dumps(INFOS_AGENCE, ensure_ascii=False),))
     con.commit()
