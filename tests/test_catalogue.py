@@ -32,5 +32,6 @@ def test_identifiants_sk(tmp_path):
 
 
 def test_norme_ignore_accents_et_tirets():
-    assert norme("Sacré-Cœur") == norme("sacre coeur") or norme("Sacré-Coeur") == "sacre coeur"
+    assert norme("Sacré-Coeur") == "sacre coeur"
+    assert norme("Liberté 6") == "liberte 6"
     assert norme("  MERMOZ ") == "mermoz"
