@@ -30,13 +30,34 @@ Email client ──► Agent (modèle + boucle + état) ──► Serveur MCP ca
 ## Structure du dépôt
 
 ```
-mcp_server/   Serveur MCP + script du catalogue (30 biens)   — Partie 1
-data/         Base SQLite générée (non versionnée)           — Partie 1
-agent/        Boucle de l'agent, prompt système              — Parties 1 puis 3
-agent/tools/  calendar.py, gmail.py, validation humaine      — Partie 2
-evaluation/   15 emails de test, résultats attendus, script  — Partie 3
-traces/       Traces de 3 traitements complets               — Partie 3
-docs/         Schémas, décisions techniques
+mcp_server/
+  catalogue.py        script de création de la base (30 biens) + infos de l'agence
+  mcp_server.py       serveur MCP : rechercher_biens, detail_bien, infos_agence, agence://infos
+agent/
+  config.py           configuration lue dans .env
+  modele.py           Ollama ou API compatible OpenAI
+  prompts.py          prompt système (catalogue, agenda, emails)
+  agent.py            boucle : limites d'étapes, erreurs d'outils, traces, usage
+  catalogue_mcp.py    client MCP du catalogue (stdio ou HTTP)
+  traces.py           traces JSON Lines
+  boite.py            traitement de la boîte Gmail, un email à la fois
+  main.py             ligne de commande : demande, boite, trace
+  tools/
+    google_auth.py    OAuth, scopes minimaux
+    regles.py         règles de visite de l'agence
+    creneaux.py       calcul des créneaux libres
+    calendar.py       Google Calendar sans doublon
+    outils_agenda.py  4 actions d'agenda pour le modèle
+    gmail.py          Gmail : libellés, brouillons, envoi validé
+    outils_gmail.py   4 actions Gmail pour le modèle
+    securite.py       emails = données, détection d'injection
+    validation.py     validation humaine (console)
+scripts/creer_agendas.py   un agenda par conseiller
+evaluation/          10 demandes (ex 1), emails de test (ex 4), vérificateur
+tests/               tests automatisés (faux Google en mémoire)
+docs/                inspecteur MCP, config client MCP
+traces/              traces d'exécution
+data/                base SQLite générée (non versionnée)
 ```
 
 ## Choix techniques
