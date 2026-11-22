@@ -76,6 +76,8 @@ class Bilan:
     duree_s: float = 0.0
     traces: list[str] = field(default_factory=list)
     detail: str = ""
+    reponse: str = ""                # texte du brouillon redige par le modele (evaluation)
+    conseiller: str | None = None
 
 
 def _dernier(resultat: Resultat, outil: str) -> dict | None:
@@ -170,13 +172,13 @@ class Pipeline:
 
         creneaux = _dernier(resultat, "lister_creneaux_libres")
         texte = brouillon["arguments"].get("texte", "")
-        bilan.biens = biens_cites(texte)
+        bilan.biens, bilan.reponse = biens_cites(texte), texte
         champs: dict[str, Any] = {"draft_id": brouillon["resultat"]["draft_id"]}
         if creneaux and creneaux["resultat"].get("creneaux"):
             champs.update(bien_id=creneaux["resultat"]["bien_id"],
                           conseiller=creneaux["resultat"]["conseiller"],
                           creneaux=[c["debut"] for c in creneaux["resultat"]["creneaux"]])
-            bilan.creneaux = champs["creneaux"]
+            bilan.creneaux, bilan.conseiller = champs["creneaux"], champs["conseiller"]
         self.etat.enregistrer(conv, "brouillon_en_attente", "brouillon pret", **champs)
         return self._envoyer(demande, conv, bilan, champs["draft_id"],
                              "creneaux_proposes" if conv.creneaux else "attente_precisions")
