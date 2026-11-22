@@ -42,6 +42,10 @@ AGENDAS = {"Awa Diop": "awa@cal", "Moussa Ndiaye": "moussa@cal", "Fatou Sow": "f
 VERSIONS = {"avant": "aucun", "apres": "tous"}     # valeur de CORRECTIFS pour chaque version
 
 
+class ModeleInjoignable(RuntimeError):
+    pass
+
+
 def ids_catalogue() -> set[str]:
     db = Path(os.getenv("CATALOGUE_DB_PATH", DB_DEFAUT))
     db = db if db.is_absolute() else RACINE / db
@@ -77,6 +81,9 @@ def rejouer(jeu: dict, modele=None, modele_interpretation=None, emails: set[str]
         gmail.recevoir(email["de"], email["objet"], email["corps"])
         bilans = pipeline.passe(1)
         bilan = bilans[0] if bilans else None
+        if bilan and bilan.decision == "erreur" and bilan.detail.startswith("ModelConnectionError"):
+            # le pipeline absorbe les pannes ; ici, inutile de mesurer 15 echecs de connexion
+            raise ModeleInjoignable(bilan.detail)
         decision = bilan.decision if bilan else "aucune"
         verdict = evaluer(email["attendu"], decision, bilan.biens if bilan else [],
                           bilan.creneaux if bilan else [], bilan.reponse if bilan else "", base,
@@ -151,8 +158,6 @@ def main() -> int:
     parser.add_argument("--emails", help="identifiants separes par des virgules (ex. T01,T07)")
     args = parser.parse_args()
 
-    from pydantic_ai.exceptions import ModelConnectionError
-
     jeu = json.loads(JEU.read_text(encoding="utf-8"))
     choix = set(args.emails.split(",")) if args.emails else None
     RESULTATS.mkdir(parents=True, exist_ok=True)
@@ -162,8 +167,10 @@ def main() -> int:
         print(f"\n=== Version {version} (CORRECTIFS={VERSIONS[version]}) ===")
         try:
             lignes = rejouer(jeu, emails=choix)
-        except ModelConnectionError:
-            print("Modele injoignable : lancez Ollama ou renseignez une API dans .env.", file=sys.stderr)
+        except ModeleInjoignable:
+            config = Config()
+            print(f"Modele injoignable ({config.fournisseur}, {config.base_url or 'http://localhost:11434/v1'}) :"
+                  " lancez Ollama ou renseignez une API dans .env.", file=sys.stderr)
             return 2
         resultats[version] = lignes
         md = tableau(lignes, f"Resultats {version} correction")
