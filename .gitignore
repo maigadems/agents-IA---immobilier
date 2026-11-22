@@ -5,6 +5,11 @@ client_secret*.json
 token*.json
 *.pem
 
+# Fichiers produits a l'execution (traces de travail, etat des conversations)
+# Les traces retenues comme livrables sont copiees dans evaluation/traces/.
+/traces/
+/etat/
+
 # Python
 __pycache__/
 *.py[cod]
