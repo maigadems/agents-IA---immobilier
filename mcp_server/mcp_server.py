@@ -5,7 +5,7 @@ import sqlite3
 import sys
 from pathlib import Path
 from typing import Literal
-from mcp.server.fastmcp import FastMCP 
+from fastmcp import FastMCP
 
 sys.path.insert(0, str(Path(__file__).parent))
 from catalogue import DB_DEFAUT, RACINE, creer, norme
@@ -39,8 +39,11 @@ def _bien_resume(r: sqlite3.Row) -> dict:
         "conseiller": r["conseiller"],
     }
     
-def creer_serveur(host: str = "127.0.0.1", port: int = 8000) -> FastMCP:
-    mcp = FastMCP("catalogue-sama-ker", host=host, port=port)
+def creer_serveur() -> FastMCP:
+    mcp = FastMCP(
+        "catalogue-sama-ker",
+        instructions="Catalogue des biens a louer de l'agence Sama Ker Immobilier (Dakar).",
+    )
 
     # outils rechercher_biens 
     @mcp.tool()
@@ -161,5 +164,8 @@ if __name__ == "__main__":
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8000)
     a = p.parse_args()
-    serveur = creer_serveur(a.host, a.port)
-    serveur.run(transport="stdio" if a.transport == "stdio" else "streamable-http")
+    serveur = creer_serveur()
+    if a.transport == "stdio":
+        serveur.run(transport="stdio", show_banner=False)
+    else:
+        serveur.run(transport="http", host=a.host, port=a.port)
