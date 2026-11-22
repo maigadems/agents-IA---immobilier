@@ -64,3 +64,15 @@ def test_limite_d_etapes_transmet_a_un_conseiller():
     agent = construire_agent(config, [toolset_catalogue(config)], modele=boucle_infinie)
     r = executer(agent, "boucle", config)
     assert r.erreur == "limite" and "conseiller" in r.texte
+
+
+def test_resultats_outils_associent_arguments_et_resultats():
+    config = Config()
+    agent = construire_agent(config, [toolset_catalogue(config)], modele=modele_scenario(
+        ("detail_bien", {"bien_id": "SK-999"}),
+        ("detail_bien", {"bien_id": "SK-002"}),
+    ))
+    r = executer(agent, "detail du bien", config)
+    echec, succes = r.resultats_outils
+    assert echec["ok"] is False and echec["arguments"] == {"bien_id": "SK-999"}
+    assert succes["ok"] is True and succes["resultat"]["id"] == "SK-002"
