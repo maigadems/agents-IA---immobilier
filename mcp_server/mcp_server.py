@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 from typing import Literal
 from fastmcp import FastMCP
+from fastmcp.exceptions import ToolError
 
 sys.path.insert(0, str(Path(__file__).parent))
 from catalogue import DB_DEFAUT, RACINE, creer, norme
@@ -73,11 +74,11 @@ def creer_serveur() -> FastMCP:
         "biens" est vide : il ne faut alors proposer aucun bien au client.
         """
         if not 1 <= limite <= LIMITE_MAX:
-            raise ValueError(f"limite doit etre comprise entre 1 et {LIMITE_MAX} (recu : {limite}).")
+            raise ToolError(f"limite doit etre comprise entre 1 et {LIMITE_MAX} (recu : {limite}).")
         if pieces_min is not None and pieces_max is not None and pieces_min > pieces_max:
-            raise ValueError("pieces_min est superieur a pieces_max.")
+            raise ToolError("pieces_min est superieur a pieces_max.")
         if loyer_min_fcfa is not None and loyer_max_fcfa is not None and loyer_min_fcfa > loyer_max_fcfa:
-            raise ValueError("loyer_min_fcfa est superieur a loyer_max_fcfa.")
+            raise ToolError("loyer_min_fcfa est superieur a loyer_max_fcfa.")
         sql, params = "SELECT * FROM biens WHERE 1=1", []
         if quartier:
             sql += " AND quartier_norm LIKE ?"
@@ -129,7 +130,7 @@ def creer_serveur() -> FastMCP:
         with _connection() as con:
             r = con.execute("SELECT * FROM biens WHERE id = ?", (bien_id,)).fetchone()
         if r is None:
-            raise ValueError(f"Aucun bien avec l'identifiant {bien_id}. Les identifiants vont de SK-001 a SK-030.")
+            raise ToolError(f"Aucun bien avec l'identifiant {bien_id}. Les identifiants vont de SK-001 a SK-030.")
         fiche = _bien_resume(r)
         fiche.update(
             {
