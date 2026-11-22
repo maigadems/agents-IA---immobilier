@@ -53,15 +53,24 @@ Pour travailler en parallèle sans s'attendre, on fixe les interfaces dès maint
   - `detail_bien(bien_id)` — identifiant `SK-001` à `SK-030`, renvoie la fiche avec l'adresse ;
   - `infos_agence()` et la ressource `agence://infos` — horaires, zones, conditions ;
   - erreurs : l'outil lève une erreur MCP avec un message explicite.
-- **Calendar (P2)** — `lister_creneaux_libres(debut, fin)`, `creer_visite(...)`,
-  `deplacer_visite(...)`, `annuler_visite(event_id)`.
-- **Gmail (P2)** — `lire_demandes()`, `creer_brouillon(thread_id, texte)`,
-  `envoyer_brouillon(draft_id)`.
-- **Validation (P2)** — `demander_validation(action, details) -> bool`, appelée avant
-  toute écriture (envoi, création/déplacement/annulation de visite).
+- **Calendar (P2)** — outils du modèle dans [agent/tools/outils_agenda.py](agent/tools/outils_agenda.py) :
+  - `lister_creneaux_libres(bien_id, date_debut, date_fin, heure_min, heure_max)` renvoie
+    `{"conseiller", "creneaux": [{"debut", "fin", "libelle"}]}` ;
+  - `creer_visite(bien_id, debut, client_nom, client_email)`, `deplacer_visite(bien_id, event_id, nouveau_debut)`
+    et `annuler_visite(bien_id, event_id)` renvoient `{"statut": "cree" | "deplace" | "annule" | "creneau_pris"
+    | "doublon" | "refuse_par_conseiller" | "regle_non_respectee", ...}`.
+- **Gmail (P2)** — outils du modèle dans [agent/tools/outils_gmail.py](agent/tools/outils_gmail.py) :
+  - `lire_demandes(maximum)` renvoie une liste `{message_id, thread_id, client_nom, client_email, objet,
+    contenu, statut, suspect_injection, hors_perimetre_probable}` ;
+  - `creer_brouillon(message_id, texte)` renvoie `{"statut": "brouillon_cree", "draft_id", "thread_id"}` ;
+  - `envoyer_brouillon(draft_id)` renvoie `{"statut": "envoye" | "refuse_par_conseiller"}` ;
+  - `transmettre_conseiller(message_id, motif)`.
+- **Validation (P2)** — `Validation.demander(action, details) -> bool`
+  ([agent/tools/validation.py](agent/tools/validation.py)), appelée **par le code** avant toute
+  écriture ; chaque décision est inscrite dans la trace.
 
-La Partie 3 assemble ces fonctions : elle peut démarrer avec des fonctions factices
-(mêmes signatures) et les remplacer quand les PR des parties 1 et 2 sont fusionnées.
+La Partie 3 (pipeline) réutilise `agent.boite.traiter_boite` et les mêmes outils. Elle ajoute la
+gestion de la confirmation du client et l'état de chaque conversation, en s'appuyant sur le fil Gmail.
 
 ## Calendrier
 
