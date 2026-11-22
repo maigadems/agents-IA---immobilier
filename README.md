@@ -112,14 +112,74 @@ Rejoue les 10 demandes de [evaluation/demandes_ex1.json](evaluation/demandes_ex1
 que les biens attendus le sont, et que l'absence de résultat est annoncée. Comme l'agent passe
 par le serveur MCP, la même commande valide l'exercice 2 (« mêmes résultats via MCP »).
 
+## Accès Google (Ex 3-4)
+
+Uniquement le **compte Google de test** de l'équipe, jamais un compte personnel.
+
+1. [Google Cloud Console](https://console.cloud.google.com) → nouveau projet → activer
+   **Google Calendar API** et **Gmail API**.
+2. *Écran de consentement OAuth* : type **Externe**, statut **Test**, ajouter l'adresse du
+   compte de test dans *Utilisateurs test*.
+3. *Identifiants* → **ID client OAuth** → type **Application de bureau** → télécharger le JSON
+   et l'enregistrer à la racine sous `credentials.json`.
+4. Créer les agendas des conseillers (une seule fois) et copier les lignes affichées dans `.env` :
+
+   ```bash
+   python scripts/creer_agendas.py
+   ```
+
+5. Au premier lancement de l'agent, le navigateur demande le consentement ; le jeton est
+   enregistré dans `token.json`.
+
+Scopes demandés par l'agent ([agent/tools/google_auth.py](agent/tools/google_auth.py)) :
+
+| Scope | Usage |
+|---|---|
+| `gmail.modify` | lire les demandes, poser les libellés, créer et envoyer les brouillons |
+| `calendar.events` | créer, déplacer, annuler les visites |
+| `calendar.freebusy` | lire les plages occupées des conseillers |
+
+Le scope `calendar` complet sert seulement à `creer_agendas.py`, avec un jeton séparé
+(`token_setup.json`) que l'on peut supprimer ensuite. `credentials.json` et `token*.json`
+sont exclus du dépôt par `.gitignore`.
+
+## Agenda des conseillers (Ex 3)
+
+```bash
+python -m agent.main demande --agenda -v \
+  "Je voudrais visiter SK-001 jeudi prochain en fin d'après-midi"
+```
+
+| Action (outil) | Ce que fait le code |
+|---|---|
+| `lister_creneaux_libres(bien_id, date_debut, date_fin, heure_min, heure_max)` | lit les plages occupées (freebusy) du conseiller **qui gère le bien** et renvoie 3 créneaux libres, espacés de 30 min |
+| `creer_visite(bien_id, debut, client_nom, client_email)` | vérifie les règles, revérifie la disponibilité, **demande la validation du conseiller**, puis crée l'événement avec l'adresse lue dans le catalogue |
+| `deplacer_visite(bien_id, event_id, nouveau_debut)` | mêmes contrôles, validation, puis déplacement |
+| `annuler_visite(bien_id, event_id)` | validation, puis annulation |
+
+Règles appliquées par le code ([agent/tools/regles.py](agent/tools/regles.py)), pas laissées
+au modèle : visites de **45 min**, **lundi-samedi 9 h-18 h** (dernier début 17 h 15), fuseau
+**Africa/Dakar**, pas de visite dans les 2 prochaines heures.
+
+**Aucun doublon** : la disponibilité est revérifiée juste avant l'écriture, et l'identifiant
+de l'événement est dérivé de l'agenda et de l'heure de début. Deux demandes simultanées sur le
+même créneau produisent donc un seul événement, car Google refuse le second (409).
+
+**Validation humaine** : le conseiller voit le bien, l'adresse, l'horaire et le client, puis
+répond `o`/`N` dans la console. Sans console interactive, la réponse est *non*. Chaque
+décision est inscrite dans la trace (`"type": "validation"`).
+
 ## Tests
 
 ```bash
 pytest -q
 ```
 
-Catalogue, serveur MCP (via un vrai client MCP), boucle de l'agent avec un modèle simulé
-(traces, erreur d'outil, limite d'étapes) et cohérence des 10 demandes avec la base.
+- **Catalogue et serveur MCP** : testés avec un vrai client MCP.
+- **Boucle de l'agent** : testée avec un modèle simulé (traces, erreur d'outil, limite d'étapes).
+- **Les 10 demandes** : cohérence avec la base.
+- **Exercice 3** : règles, créneaux, et agenda avec un faux Google Calendar en mémoire (3 créneaux
+  libres, aucun doublon même en cas de course, bon conseiller et bonne adresse, refus du conseiller).
 
 ## Serveur MCP du catalogue — documentation
 
