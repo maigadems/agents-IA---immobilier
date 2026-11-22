@@ -156,3 +156,33 @@ def test_creneau_pris_entre_temps_nouveaux_creneaux_proposes(monde):
     assert premier.creneaux[0] not in suite.creneaux and suite.creneaux
     assert len(monde["cal"].actifs("awa@cal")) == 1                # seulement l'autre visite
     assert "vient malheureusement d'etre reserve" in monde["gmail"].envois[1]["mime"].get_content()
+
+def test_modele_en_panne_message_repris_puis_transmis(monde):
+    from pydantic_ai.models.function import FunctionModel
+
+    def panne(messages, info):
+        raise ConnectionError("modele injoignable")
+    mid = monde["gmail"].recevoir("a@client.test", "Visite", DEMANDE)
+    p = pipeline(monde, Conseiller(True), modele=FunctionModel(panne))
+    decisions = [p.passe()[0].decision for _ in range(3)]
+    assert decisions == ["erreur", "erreur", "transmis"]
+    assert "SK-Transmis-conseiller" in monde["gmail"].noms_libelles(mid)
+    assert p.passe() == [] and monde["gmail"].envois == []
+
+
+def test_erreur_puis_reprise_garde_l_etat_de_la_conversation(monde):
+    mid = monde["gmail"].recevoir("Aminata Fall <aminata@client.test>", "Visite F3 Mermoz", DEMANDE)
+    p = pipeline(monde, Conseiller(True, True))
+    [premier] = p.passe()
+    repondre(monde, mid, "Le premier créneau me va.")
+    lecteur = p.fiche_bien
+
+    async def mcp_arrete(bien_id):
+        raise ConnectionError("serveur MCP arrete")
+    p.fiche_bien = mcp_arrete
+    assert p.passe()[0].decision == "erreur"
+    assert monde["etat"].get(premier.thread_id).etat == "creneaux_proposes"
+
+    p.fiche_bien = lecteur                            # le serveur redemarre
+    [suite] = p.passe()
+    assert suite.decision == "visite_creee"
