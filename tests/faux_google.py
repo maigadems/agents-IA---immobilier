@@ -200,7 +200,11 @@ class FauxGmail:
                         self._modify(userId, m["id"], body).execute()
                 return {"id": id}
             return _Requete(run)
-        return _Espace(modify=modify)
+
+        def get(userId, id, format="full"):
+            return _Requete(lambda: {"id": id, "messages": [
+                copy.deepcopy(m) for m in self.msgs.values() if m["threadId"] == id]})
+        return _Espace(modify=modify, get=get)
 
     def drafts(self):
         return _Espace(create=self._creer_brouillon, get=self._get_brouillon, send=self._envoyer)
