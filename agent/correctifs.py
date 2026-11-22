@@ -15,7 +15,13 @@ from __future__ import annotations
 import os
 
 # nom -> description courte (echec constate, correction apportee)
-CORRECTIFS: dict[str, str] = {}
+CORRECTIFS: dict[str, str] = {
+    "lexique_wolof": (
+        "Emails melant francais et wolof (T04, T15) : le besoin exprime en wolof (\"dama soxla\", "
+        "\"suba\", \"ci Point E\") risque d'etre mal compris. Correctif : un lexique wolof court "
+        "dans le prompt. A confirmer ou remplacer apres analyse des traces du vrai modele."
+    ),
+}
 
 
 def actifs() -> set[str]:

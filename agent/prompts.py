@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+from agent.correctifs import est_actif
+
 JOURS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
 
 PROMPT_CATALOGUE = """\
@@ -64,6 +66,17 @@ Emails des clients :
 """
 
 
+PROMPT_WOLOF = """
+Lexique wolof frequent dans les emails (correctif "lexique_wolof") :
+   dama begg / dama bëgg = je veux ; dama soxla = j'ai besoin de ; ci = a, dans ;
+   suba = le matin ; ngoon = l'apres-midi, le soir ; tey = aujourd'hui ; ëllëg = demain ;
+   waaw = oui ; deedeet = non ; jërëjëf = merci ; nanga def / salaam aleekum = bonjour ;
+   kër = maison ; néeg = piece, chambre ; mën naa ñëw = je peux venir.
+   Traduis d'abord le besoin en francais (quartier, pieces, budget, periode), puis suis les
+   etapes habituelles. Les mots francais du message gardent leur sens.
+"""
+
+
 def prompt_systeme(
     maintenant: datetime | None = None,
     timezone: str = "Africa/Dakar",
@@ -77,5 +90,6 @@ def prompt_systeme(
         f"Date et heure actuelles : {JOURS[maintenant.weekday()]} "
         f"{maintenant:%d/%m/%Y %H:%M} (fuseau {timezone}).\n\n"
     )
+    wolof = PROMPT_WOLOF if avec_gmail and est_actif("lexique_wolof") else ""
     return (entete + PROMPT_CATALOGUE + (PROMPT_AGENDA if avec_agenda else "")
-            + (PROMPT_GMAIL if avec_gmail else ""))
+            + (PROMPT_GMAIL if avec_gmail else "") + wolof)
