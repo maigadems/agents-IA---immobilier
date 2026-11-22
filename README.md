@@ -39,13 +39,31 @@ traces/       Traces de 3 traitements complets               — Partie 3
 docs/         Schémas, décisions techniques
 ```
 
+## Choix techniques
+
+| Brique | Choix | Pourquoi |
+|---|---|---|
+| Modèle | Ollama (`qwen2.5:7b`) ou API gratuite compatible OpenAI (Groq…) | appel d'outils natif, gratuit |
+| Framework | [Pydantic AI](https://ai.pydantic.dev) | open source, outils typés, client MCP intégré, historique complet des messages pour les traces |
+| Catalogue | SQLite + serveur MCP [FastMCP](https://gofastmcp.com) | imposé ; FastMCP = SDK MCP Python de référence |
+| Traces | fichiers JSON Lines dans `traces/` | lisibles sans outil externe, rejouables |
+
+## Prérequis
+
+- Python 3.11+ (testé en 3.13)
+- Un modèle avec appel d'outils :
+  - **local** : [Ollama](https://ollama.com) puis `ollama pull qwen2.5:7b`
+  - **ou API gratuite** compatible OpenAI (ex. Groq) : clé dans `.env`
+- Node.js 18+ uniquement pour l'inspecteur MCP
+
 ## Installation
 
 ```bash
 python -m venv .venv
 # Windows : .venv\Scripts\activate   |   Linux/Mac : source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env        # puis remplir les valeurs
+cp .env.example .env        # puis choisir le modèle (voir commentaires du fichier)
+python mcp_server/catalogue.py   # crée data/catalogue.db (sinon créé au 1er appel)
 ```
 
 Identifiants Google (compte de test de l'atelier uniquement) : placer
@@ -53,15 +71,55 @@ Identifiants Google (compte de test de l'atelier uniquement) : placer
 
 ## Lancement
 
-> À compléter par chaque partie au fil des exercices.
+```bash
+# Ex 1-2 : interroger l'agent (il lance lui-même le serveur MCP en stdio)
+python -m agent.main demande "Je cherche un F3 à Mermoz à moins de 400 000 F" -v
+
+# Serveur MCP seul, en HTTP (puis MCP_SERVER_URL=http://127.0.0.1:8000/mcp dans .env)
+python mcp_server/mcp_server.py --transport http
+
+# Relire une trace
+python -m agent.main trace traces/<fichier>.jsonl
+```
+
+## Boucle de l'agent et traces (Ex 1)
+
+- **Prompt système** : [agent/prompts.py](agent/prompts.py), avec la date du jour ; l'agent ne
+  cite que des biens renvoyés par les outils et le dit clairement quand rien ne correspond.
+- **Étapes limitées** : `AGENT_MAX_ETAPES` requêtes au modèle et `AGENT_MAX_APPELS_OUTILS`
+  appels d'outils par demande ; au-delà, l'agent s'arrête et transmet à un conseiller.
+- **Erreur d'outil** : le message d'erreur est renvoyé au modèle, qui corrige ses arguments
+  (`AGENT_RETRIES_OUTILS` tentatives au maximum).
+- **Traces** : un fichier `traces/<date>-<libellé>-<id>.jsonl` par demande, avec chaque
+  `appel_outil` (arguments), `resultat_outil`, `erreur_outil`, la `reponse` et l'`usage`
+  (étapes, appels, tokens, durée). Exemple :
+
+```
+[demande] un F3 a Mermoz a moins de 400 000 F
+  -> rechercher_biens({"quartier": "Mermoz", "pieces_min": 3, "pieces_max": 3, "loyer_max_fcfa": 400000})
+  <- rechercher_biens : {"nombre": 1, "biens": [{"id": "SK-001", "quartier": "Mermoz", ...}]}
+[reponse] Je vous propose l'appartement SK-001 à Mermoz : 3 pièces, 380 000 F CFA/mois...
+```
+
+## Critères d'acceptation Ex 1-2
 
 ```bash
-python mcp_server/catalogue.py                         # crée data/catalogue.db (auto au 1er appel sinon)
-python mcp_server/mcp_server.py                        # serveur MCP en stdio
-python mcp_server/mcp_server.py --transport http       # serveur MCP en HTTP : http://127.0.0.1:8000/mcp
-python -m agent.main                 # lance l'agent
-python evaluation/run_eval.py        # rejoue le jeu de test
+python evaluation/verifier_ex1.py --json evaluation/resultats_ex1.json
 ```
+
+Rejoue les 10 demandes de [evaluation/demandes_ex1.json](evaluation/demandes_ex1.json)
+(dont 3 sans aucun bien correspondant) et vérifie qu'aucun identifiant inventé n'est cité,
+que les biens attendus le sont, et que l'absence de résultat est annoncée. Comme l'agent passe
+par le serveur MCP, la même commande valide l'exercice 2 (« mêmes résultats via MCP »).
+
+## Tests
+
+```bash
+pytest -q
+```
+
+Catalogue, serveur MCP (via un vrai client MCP), boucle de l'agent avec un modèle simulé
+(traces, erreur d'outil, limite d'étapes) et cohérence des 10 demandes avec la base.
 
 ## Serveur MCP du catalogue — documentation
 
