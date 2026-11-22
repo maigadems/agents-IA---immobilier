@@ -186,3 +186,24 @@ def test_erreur_puis_reprise_garde_l_etat_de_la_conversation(monde):
     p.fiche_bien = lecteur                            # le serveur redemarre
     [suite] = p.passe()
     assert suite.decision == "visite_creee"
+
+def test_demande_incomplete_question_puis_suite_avec_l_historique(monde):
+    vues = []
+
+    def avec_memoire(messages, info):
+        from modeles_simules import _consigne
+        vues.append(_consigne(messages))
+        return secretaire().function(messages, info)
+    from pydantic_ai.models.function import FunctionModel
+    mid = monde["gmail"].recevoir("Ibrahima <ibra@client.test>", "Logement", "Bonjour, je cherche un duplex.")
+    p = pipeline(monde, Conseiller(True, True), modele=FunctionModel(avec_memoire))
+    [premier] = p.passe()
+    assert premier.etat == "attente_precisions" and premier.creneaux == []
+
+    monde["gmail"].recevoir("Ibrahima <ibra@client.test>", "Re: Logement",
+                            "Finalement un studio à Ouakam pour 150 000 F, merci.",
+                            thread_id=monde["gmail"].msgs[mid]["threadId"])
+    [suite] = p.passe()
+    assert suite.etape == "suite" and suite.etat == "creneaux_proposes"
+    assert suite.biens and set(suite.biens) <= {"SK-005", "SK-006"}
+    assert "Echanges precedents" in vues[-1] and "je cherche un duplex" in vues[-1]
