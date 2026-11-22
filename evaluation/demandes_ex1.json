@@ -1,0 +1,62 @@
+[
+  {
+    "id": "D01",
+    "demande": "Bonjour, je cherche un F3 à Mermoz à moins de 400 000 F.",
+    "filtres": {"quartier": "Mermoz", "pieces_min": 3, "pieces_max": 3, "loyer_max_fcfa": 400000},
+    "attendus": ["SK-001"]
+  },
+  {
+    "id": "D02",
+    "demande": "Avez-vous un studio à Ouakam pour 150 000 F maximum ?",
+    "filtres": {"quartier": "Ouakam", "type_bien": "studio", "loyer_max_fcfa": 150000},
+    "attendus": ["SK-005", "SK-006"]
+  },
+  {
+    "id": "D03",
+    "demande": "Je voudrais louer une villa aux Almadies.",
+    "filtres": {"quartier": "Almadies", "type_bien": "villa"},
+    "attendus": ["SK-009"]
+  },
+  {
+    "id": "D04",
+    "demande": "Un appartement de 2 pièces à Sacré-Coeur, c'est possible ?",
+    "filtres": {"quartier": "Sacre-Coeur", "type_bien": "appartement", "pieces_min": 2, "pieces_max": 2},
+    "attendus": ["SK-012"]
+  },
+  {
+    "id": "D05",
+    "demande": "Je cherche un F4 à Mermoz à moins de 300 000 F.",
+    "filtres": {"quartier": "Mermoz", "pieces_min": 4, "pieces_max": 4, "loyer_max_fcfa": 300000},
+    "attendus": []
+  },
+  {
+    "id": "D06",
+    "demande": "Vous avez une villa à Hann Bel-Air ?",
+    "filtres": {"quartier": "Hann", "type_bien": "villa"},
+    "attendus": []
+  },
+  {
+    "id": "D07",
+    "demande": "Je cherche un appartement meublé au Plateau.",
+    "filtres": {"quartier": "Plateau", "type_bien": "appartement", "meuble": true},
+    "attendus": ["SK-019"]
+  },
+  {
+    "id": "D08",
+    "demande": "Un studio à 120 000 F maximum, peu importe le quartier.",
+    "filtres": {"type_bien": "studio", "loyer_max_fcfa": 120000},
+    "attendus": ["SK-014", "SK-024"]
+  },
+  {
+    "id": "D09",
+    "demande": "Est-ce que vous avez un duplex disponible ?",
+    "filtres": {"type_bien": "duplex"},
+    "attendus": []
+  },
+  {
+    "id": "D10",
+    "demande": "Un 3 pièces au Point E entre 400 000 et 500 000 F par mois.",
+    "filtres": {"quartier": "Point E", "pieces_min": 3, "pieces_max": 3, "loyer_min_fcfa": 400000, "loyer_max_fcfa": 500000},
+    "attendus": ["SK-015"]
+  }
+]
