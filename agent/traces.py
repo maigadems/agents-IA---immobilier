@@ -54,7 +54,17 @@ def evenements_depuis_messages(messages: list[ModelMessage]) -> list[dict]:
                     evenements.append({"type": "reponse", "etape": etape, "texte": part.content})
         elif isinstance(message, ModelRequest):
             for part in message.parts:
-                if isinstance(part, ToolReturnPart):
+                if isinstance(part, ToolReturnPart) and part.outcome != "success":
+                    # outil en echec : le message d'erreur est renvoye au modele
+                    evenements.append({
+                        "type": "erreur_outil",
+                        "etape": etape,
+                        "outil": part.tool_name,
+                        "erreur": _serialisable(part.content),
+                        "statut": part.outcome,
+                        "id": part.tool_call_id,
+                    })
+                elif isinstance(part, ToolReturnPart):
                     evenements.append({
                         "type": "resultat_outil",
                         "etape": etape,
