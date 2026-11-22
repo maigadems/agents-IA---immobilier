@@ -28,6 +28,7 @@ from agent.etat import Conversation, EtatConversations
 from agent.interpretation import interpreter
 from agent.tools.calendar import Agenda
 from agent.tools.gmail import BoiteGmail
+from agent.tools.regles import DUREE_VISITE
 from agent.tools.validation import Validation
 from agent.traces import Trace
 
@@ -235,7 +236,11 @@ class Pipeline:
         """VALIDATION 2 : une seule question au conseiller pour la visite ET la confirmation."""
         fiche = asyncio.run(self.fiche_bien(conv.bien_id))
         bilan.biens, bilan.creneaux = [fiche["id"]], [creneau.isoformat()]
-        texte = texte_confirmation(fiche, creneau, demande["client_nom"])
+        if self.agenda.occupations(fiche["conseiller"], creneau, creneau + DUREE_VISITE):
+            # pris entre-temps : inutile de deranger le conseiller pour une visite impossible
+            trace.ecrire({"type": "erreur", "message": f"creneau {creneau.isoformat()} pris entre-temps"})
+            return self._proposer_autres(demande, conv, bilan, fiche, creneau, {"statut": "creneau_pris"})
+        texte =texte_confirmation(fiche, creneau, demande["client_nom"])
         details = {"bien": fiche["id"], "adresse": fiche["adresse"], "conseiller": fiche["conseiller"],
                    "debut": creneau.isoformat(), "client": f"{demande['client_nom']} <{demande['client_email']}>",
                    "email_de_confirmation": texte}
