@@ -63,7 +63,7 @@ def executer(agent: Agent, demande: str, config: Config, libelle: str = "demande
     duree = time.perf_counter() - debut
     messages = resultat.all_messages()
     trace.ecrire_messages(messages)
-    usage = resultat.usage()
+    usage = resultat.usage
     outils = [p.tool_name for m in messages for p in getattr(m, "parts", [])
               if getattr(p, "part_kind", "") == "tool-call"]
     trace.ecrire({
