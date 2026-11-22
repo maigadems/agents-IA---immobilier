@@ -11,8 +11,9 @@ import sys
 from pathlib import Path
 
 from agent.agent import construire_agent, executer
-from agent.catalogue_mcp import toolset_catalogue
+from agent.catalogue_mcp import lecteur_fiches, toolset_catalogue
 from agent.config import Config
+from agent.tools.validation import Validation
 from agent.traces import resume_lisible
 
 
@@ -22,10 +23,27 @@ def _console_utf8() -> None:
             flux.reconfigure(encoding="utf-8")
 
 
+def _outils(config: Config, validation: Validation, agenda: bool) -> list:
+    toolsets = [toolset_catalogue(config)]
+    if agenda:
+        from agent.tools.calendar import Agenda
+        from agent.tools.google_auth import service_calendar
+        from agent.tools.outils_agenda import toolset_agenda
+        from agent.tools.regles import agendas_conseillers
+
+        agendas = agendas_conseillers()
+        if not agendas:
+            raise SystemExit("CALENDAR_ID_CONSEILLER_* absents du .env : lancer scripts/creer_agendas.py")
+        toolsets.append(toolset_agenda(Agenda(service_calendar(), agendas, validation),
+                                       lecteur_fiches(config)))
+    return toolsets
+
+
 def cmd_demande(args: argparse.Namespace) -> int:
     config = Config()
-    agent = construire_agent(config, [toolset_catalogue(config)])
-    resultat = executer(agent, args.texte, config)
+    validation = Validation()
+    agent = construire_agent(config, _outils(config, validation, args.agenda), avec_agenda=args.agenda)
+    resultat = executer(agent, args.texte, config, validation=validation)
     print(resultat.texte)
     print(f"\n--- {resultat.appels_outils} appel(s) d'outils, "
           f"{resultat.tokens_entree + resultat.tokens_sortie} tokens, "
@@ -49,6 +67,7 @@ def main(argv: list[str] | None = None) -> int:
     p = sous.add_parser("demande", help="pose une question a l'agent (catalogue)")
     p.add_argument("texte")
     p.add_argument("-v", "--verbeux", action="store_true", help="affiche la trace")
+    p.add_argument("--agenda", action="store_true", help="donne acces a Google Calendar (ex 3)")
     p.set_defaults(func=cmd_demande)
 
     p = sous.add_parser("trace", help="affiche une trace de facon lisible")

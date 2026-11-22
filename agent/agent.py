@@ -13,6 +13,7 @@ from pydantic_ai.usage import UsageLimits
 from agent.config import Config
 from agent.modele import construire_modele
 from agent.prompts import prompt_systeme
+from agent.tools.validation import Validation
 from agent.traces import Trace
 
 
@@ -44,9 +45,20 @@ def construire_agent(
     )
 
 
-def executer(agent: Agent, demande: str, config: Config, libelle: str = "demande") -> Resultat:
-    """Execute une demande dans les limites de la boucle et ecrit la trace complete."""
+def executer(
+    agent: Agent,
+    demande: str,
+    config: Config,
+    libelle: str = "demande",
+    validation: Validation | None = None,
+) -> Resultat:
+    """Execute une demande dans les limites de la boucle et ecrit la trace complete.
+
+    Les decisions de validation humaine sont journalisees dans la meme trace.
+    """
     trace = Trace(config.dossier_traces, libelle)
+    if validation is not None:
+        validation.trace = trace
     trace.ecrire({"type": "demande", "texte": demande})
     limites = UsageLimits(
         request_limit=config.max_etapes,
