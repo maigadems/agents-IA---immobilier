@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "catalogue-sama-ker-local": {
+      "command": "python",
+      "args": ["mcp_server/mcp_server.py"],
+      "env": {"CATALOGUE_DB_PATH": "data/catalogue.db"}
+    },
+    "catalogue-sama-ker-http": {
+      "url": "http://127.0.0.1:8000/mcp",
+      "transport": "http"
+    }
+  }
+}
