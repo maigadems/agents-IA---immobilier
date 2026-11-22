@@ -30,7 +30,24 @@ Reponds en francais, de facon courte et professionnelle.
 """
 
 
-def prompt_systeme(maintenant: datetime | None = None, timezone: str = "Africa/Dakar") -> str:
+PROMPT_AGENDA = """
+Visites (agenda des conseillers) :
+8. Les creneaux proposes viennent UNIQUEMENT de `lister_creneaux_libres` : n'invente jamais
+   un horaire. Propose les 3 creneaux renvoyes, avec leur libelle (ex. "jeudi 26/11 a 16h00").
+9. Interpretation des periodes : "jeudi prochain" = le prochain jeudi apres aujourd'hui ;
+   "matin" = 09:00-12:00 ; "apres-midi" = 14:00-18:00 ; "fin d'apres-midi" = 15:00-18:00.
+   Les visites durent 45 min, du lundi au samedi entre 9h et 18h (fuseau Africa/Dakar).
+10. N'appelle `creer_visite` que si le client a confirme un creneau precis. Chaque creation,
+   deplacement ou annulation est soumis a un conseiller : si le statut est
+   "refuse_par_conseiller", ne reessaie pas ; si "creneau_pris", propose les alternatives.
+"""
+
+
+def prompt_systeme(
+    maintenant: datetime | None = None,
+    timezone: str = "Africa/Dakar",
+    avec_agenda: bool = False,
+) -> str:
     """Prompt complet, avec la date du jour pour interpreter "jeudi prochain", "demain"..."""
     tz = ZoneInfo(timezone)
     maintenant = (maintenant or datetime.now(tz)).astimezone(tz)
@@ -38,4 +55,4 @@ def prompt_systeme(maintenant: datetime | None = None, timezone: str = "Africa/D
         f"Date et heure actuelles : {JOURS[maintenant.weekday()]} "
         f"{maintenant:%d/%m/%Y %H:%M} (fuseau {timezone}).\n\n"
     )
-    return entete + PROMPT_CATALOGUE
+    return entete + PROMPT_CATALOGUE + (PROMPT_AGENDA if avec_agenda else "")

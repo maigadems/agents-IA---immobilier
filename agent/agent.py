@@ -32,11 +32,12 @@ def construire_agent(
     config: Config,
     toolsets: list[AbstractToolset],
     modele: Model | None = None,
+    avec_agenda: bool = False,
 ) -> Agent:
     """Agent pydantic-ai. `retries` = nombre de tentatives quand un outil renvoie une erreur."""
     return Agent(
         modele or construire_modele(config),
-        instructions=lambda: prompt_systeme(timezone=config.timezone),
+        instructions=lambda: prompt_systeme(timezone=config.timezone, avec_agenda=avec_agenda),
         toolsets=toolsets,
         retries=config.retries_outils,
         name="agent-sama-ker",
