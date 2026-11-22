@@ -11,17 +11,21 @@ envoyer ni ecrire dans l'agenda : ces actions sont faites par ce code, apres val
 
 from __future__ import annotations
 
+import asyncio
 import re
 import time
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Awaitable, Callable
 
 from pydantic_ai import Agent
 
 from agent.agent import Resultat, executer
+from agent.choix_creneau import reconnaitre
 from agent.config import Config
+from agent.courriers import texte_alternatives, texte_confirmation
 from agent.etat import Conversation, EtatConversations
+from agent.interpretation import interpreter
 from agent.tools.calendar import Agenda
 from agent.tools.gmail import BoiteGmail
 from agent.tools.validation import Validation
@@ -115,7 +119,10 @@ class Pipeline:
         nb_validations = len(self.validation.journal)
         conv = self.etat.get(demande["thread_id"]) or Conversation(
             demande["thread_id"], demande["client_email"], demande["client_nom"])
-        bilan = self._nouvelle(demande, conv)
+        if conv.etat == "creneaux_proposes" and demande["statut"] != "transmis_automatiquement":
+            bilan = self._suite(demande, conv)
+        else:
+            bilan = self._nouvelle(demande, conv)
         # questions reellement posees au conseiller (les ecritures couvertes ne comptent pas)
         bilan.validations = sum(1 for v in self.validation.journal[nb_validations:]
                                 if "couvert_par" not in v)
@@ -180,6 +187,107 @@ class Pipeline:
             self.etat.enregistrer(conv, "brouillon_en_attente", "envoi refuse par le conseiller")
             bilan.decision = "refuse"
         return bilan
+
+    # --- reponse du client : confirmation d'un creneau ----------------------------------
+    def _suite(self, demande: dict, conv: Conversation) -> Bilan:
+        bilan = Bilan(demande["message_id"], demande["thread_id"], demande["client_email"],
+                      demande["objet"], "suite", "")
+        trace = Trace(self.config.dossier_traces, "confirmation")
+        self.validation.trace = trace
+        bilan.traces.append(str(trace.chemin))
+        trace.ecrire({"type": "demande", "texte": demande["contenu"], "etat": conv.etat,
+                      "bien_id": conv.bien_id, "creneaux_proposes": conv.creneaux})
+
+        proposes = [datetime.fromisoformat(c) for c in conv.creneaux]
+        choix = reconnaitre(demande["contenu"], proposes)
+        trace.ecrire({"type": "interpretation", "source": "code", "statut": choix.statut,
+                      "creneau": choix.creneau.isoformat() if choix.creneau else None})
+        creneau, intention = choix.creneau, None
+        if choix.statut != "choisi" and self.interpretation is not None:
+            reponse, conso = interpreter(self.interpretation, demande["contenu"], proposes)
+            bilan.tokens_entree += conso["tokens_entree"]
+            bilan.tokens_sortie += conso["tokens_sortie"]
+            trace.ecrire({"type": "interpretation", "source": "modele", **reponse.model_dump(), **conso})
+            intention = reponse.intention
+            if reponse.creneau:
+                creneau = datetime.fromisoformat(reponse.creneau)
+
+        if creneau is not None:
+            return self._confirmer(demande, conv, bilan, creneau, trace)
+        if intention == "hors_perimetre":
+            self.boite.transmettre_conseiller(demande["message_id"], "hors perimetre (reponse du client)")
+            self.etat.enregistrer(conv, "transmis", "reponse du client hors perimetre")
+            bilan.decision = "transmis"
+            return bilan
+        if intention == "annule":
+            self.boite.transmettre_conseiller(demande["message_id"], "le client renonce a la visite")
+            self.etat.enregistrer(conv, "transmis", "le client renonce")
+            bilan.decision = "transmis"
+            return bilan
+        # autres creneaux, question, choix ambigu : le modele repond avec tout le fil en contexte
+        nouvelle = self._nouvelle(demande, conv)
+        nouvelle.traces = bilan.traces + nouvelle.traces
+        nouvelle.etape = "suite"
+        return nouvelle
+
+    def _confirmer(self, demande: dict, conv: Conversation, bilan: Bilan, creneau: datetime,
+                   trace: Trace) -> Bilan:
+        """VALIDATION 2 : une seule question au conseiller pour la visite ET la confirmation."""
+        fiche = asyncio.run(self.fiche_bien(conv.bien_id))
+        bilan.biens, bilan.creneaux = [fiche["id"]], [creneau.isoformat()]
+        texte = texte_confirmation(fiche, creneau, demande["client_nom"])
+        details = {"bien": fiche["id"], "adresse": fiche["adresse"], "conseiller": fiche["conseiller"],
+                   "debut": creneau.isoformat(), "client": f"{demande['client_nom']} <{demande['client_email']}>",
+                   "email_de_confirmation": texte}
+        with self.validation.accord_groupe("Creer la visite et envoyer la confirmation", details,
+                                           ("Creer une visite dans l'agenda", ACTION_ENVOI)) as accord:
+            if not accord:
+                self.boite.transmettre_conseiller(demande["message_id"], "visite non validee par le conseiller")
+                self.etat.enregistrer(conv, "transmis", "visite refusee par le conseiller")
+                bilan.decision = "refuse"
+                return bilan
+            visite = self.agenda.creer_visite(fiche, creneau, demande["client_nom"], demande["client_email"])
+            trace.ecrire({"type": "resultat_outil", "outil": "creer_visite", "resultat": visite})
+            if visite["statut"] == "doublon" and self._visite_du_client(fiche, visite, demande):
+                # deja inscrite pour CE client (traitement interrompu puis repris) : on confirme
+                visite = {**visite, "statut": "cree"}
+            if visite["statut"] == "cree":
+                brouillon = self.boite.creer_brouillon(demande["message_id"], texte)
+                self.boite.envoyer_brouillon(brouillon["draft_id"])
+                conv.messages_traites.append(demande["message_id"])
+                self.etat.enregistrer(conv, "visite_confirmee", "visite creee et confirmation envoyee",
+                                      event_id=visite["event_id"])
+                bilan.decision = "visite_creee"
+                return bilan
+        # creneau pris entre-temps (ou devenu impossible) : hors du bloc, le nouvel email
+        # sera de nouveau soumis au conseiller
+        return self._proposer_autres(demande, conv, bilan, fiche, creneau, visite)
+
+    def _proposer_autres(self, demande: dict, conv: Conversation, bilan: Bilan, fiche: dict,
+                         creneau: datetime, visite: dict) -> Bilan:
+        alternatives = [datetime.fromisoformat(c) for c in visite.get("alternatives", [])][:3]
+        if not alternatives:
+            jour = creneau.replace(hour=0, minute=0)
+            alternatives = self.agenda.lister_creneaux_libres(fiche["conseiller"], jour,
+                                                              jour + timedelta(days=3))
+        brouillon = self.boite.creer_brouillon(demande["message_id"],
+                                               texte_alternatives(fiche, alternatives, demande["client_nom"]))
+        self.etat.enregistrer(conv, "brouillon_en_attente", f"creneau indisponible : {visite['statut']}",
+                              draft_id=brouillon["draft_id"], creneaux=[c.isoformat() for c in alternatives])
+        bilan.creneaux = conv.creneaux
+        self._envoyer(demande, conv, bilan, brouillon["draft_id"],
+                      "creneaux_proposes" if alternatives else "transmis")
+        if bilan.decision == "envoye":
+            bilan.decision = "creneau_pris"
+            if not alternatives:
+                self.boite.transmettre_conseiller(demande["message_id"], "plus de creneau libre")
+        return bilan
+
+    def _visite_du_client(self, fiche: dict, visite: dict, demande: dict) -> bool:
+        cal_id = self.agenda.agendas[fiche["conseiller"]]
+        existant = self.agenda.service.events().get(calendarId=cal_id, eventId=visite["event_id"]).execute()
+        prive = existant.get("extendedProperties", {}).get("private", {})
+        return prive.get("client_email") == demande["client_email"] and prive.get("bien_id") == fiche["id"]
 
     # --- utilitaires ------------------------------------------------------------------
     def _historique(self, demande: dict) -> str:
