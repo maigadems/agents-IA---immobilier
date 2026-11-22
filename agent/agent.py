@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Callable
 
 from pydantic_ai import Agent, UsageLimitExceeded
 from pydantic_ai.models import Model
@@ -46,12 +48,17 @@ def construire_agent(
     modele: Model | None = None,
     avec_agenda: bool = False,
     avec_gmail: bool = False,
+    maintenant: Callable[[], datetime] | None = None,
 ) -> Agent:
-    """Agent pydantic-ai. `retries` = nombre de tentatives quand un outil renvoie une erreur."""
+    """Agent pydantic-ai. `retries` = nombre de tentatives quand un outil renvoie une erreur.
+
+    `maintenant` fixe la date donnee au modele (evaluation rejouable : "jeudi prochain" designe
+    toujours le meme jour) ; par defaut, la date reelle.
+    """
     return Agent(
         modele or construire_modele(config),
-        instructions=lambda: prompt_systeme(timezone=config.timezone, avec_agenda=avec_agenda,
-                                            avec_gmail=avec_gmail),
+        instructions=lambda: prompt_systeme(maintenant() if maintenant else None, timezone=config.timezone,
+                                            avec_agenda=avec_agenda, avec_gmail=avec_gmail),
         toolsets=toolsets,
         retries=config.retries_outils,
         name="agent-sama-ker",

@@ -371,6 +371,7 @@ def construire_pipeline(
         toolset_agenda(agenda, fiche_bien).filtered(lambda ctx, t: t.name in OUTILS_AGENDA_MODELE),
         toolset_gmail(boite).filtered(lambda ctx, t: t.name in OUTILS_GMAIL_MODELE),
     ]
-    agent = construire_agent(config, toolsets, modele=modele, avec_agenda=True, avec_gmail=True)
+    agent = construire_agent(config, toolsets, modele=modele, avec_agenda=True, avec_gmail=True,
+                             maintenant=maintenant)
     return Pipeline(agent, boite, agenda, fiche_bien, etat, config, validation,
                     agent_interpretation(config, modele_interpretation or modele))
