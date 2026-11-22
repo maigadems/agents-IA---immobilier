@@ -54,6 +54,27 @@ def cmd_demande(args: argparse.Namespace) -> int:
     return 0 if resultat.erreur is None else 1
 
 
+def cmd_boite(args: argparse.Namespace) -> int:
+    from agent.boite import traiter_boite
+    from agent.tools.gmail import BoiteGmail
+    from agent.tools.google_auth import service_gmail
+    from agent.tools.outils_gmail import toolset_gmail
+
+    config = Config()
+    validation = Validation()
+    boite = BoiteGmail(service_gmail(), validation)
+    toolsets = _outils(config, validation, agenda=True) + [toolset_gmail(boite)]
+    agent = construire_agent(config, toolsets, avec_agenda=True, avec_gmail=True)
+    traitements = traiter_boite(agent, boite, config, validation, args.maximum)
+    if not traitements:
+        print("Aucune nouvelle demande.")
+    for t in traitements:
+        print(f"- {t.client_email:30} {t.objet[:40]:40} -> {t.decision}")
+        if t.resultat:
+            print(f"    trace : {t.resultat.trace}")
+    return 0
+
+
 def cmd_trace(args: argparse.Namespace) -> int:
     print(resume_lisible(Path(args.fichier)))
     return 0
@@ -69,6 +90,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("-v", "--verbeux", action="store_true", help="affiche la trace")
     p.add_argument("--agenda", action="store_true", help="donne acces a Google Calendar (ex 3)")
     p.set_defaults(func=cmd_demande)
+
+    p = sous.add_parser("boite", help="traite les demandes non lues de Gmail (ex 4)")
+    p.add_argument("--maximum", type=int, default=10)
+    p.set_defaults(func=cmd_boite)
 
     p = sous.add_parser("trace", help="affiche une trace de facon lisible")
     p.add_argument("fichier")
