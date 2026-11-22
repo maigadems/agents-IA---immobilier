@@ -169,11 +169,57 @@ même créneau produisent donc un seul événement, car Google refuse le second 
 répond `o`/`N` dans la console. Sans console interactive, la réponse est *non*. Chaque
 décision est inscrite dans la trace (`"type": "validation"`).
 
+## Boîte de l'agence (Ex 4)
+
+```bash
+python -m agent.main boite          # traite les demandes non lues, une exécution par email
+```
+
+| Action (outil) | Ce que fait le code |
+|---|---|
+| `lire_demandes(maximum)` | demandes de la boîte de réception sans libellé d'état, contenu encadré `<<<EMAIL_CLIENT … EMAIL_CLIENT>>>` |
+| `creer_brouillon(message_id, texte)` | brouillon **dans le fil du client** (`threadId`, `In-Reply-To`, `References`), signature de l'agence ajoutée ; **rien n'est envoyé** |
+| `envoyer_brouillon(draft_id)` | le conseiller voit le destinataire, l'objet et le texte ; **envoi uniquement sur « o »** |
+| `transmettre_conseiller(message_id, motif)` | hors périmètre : libellé « transmis », pas de réponse |
+
+**Libellés d'état** (créés automatiquement) :
+
+```
+SK-A-traiter ──► SK-Attente-validation ──► SK-Repondu
+      └────────► SK-Transmis-conseiller   (hors périmètre ou tentative d'injection)
+```
+
+**Contenu des emails = données** ([agent/tools/securite.py](agent/tools/securite.py)) :
+
+1. Le texte du client est encadré par des balises, et les balises imitées dans le message sont
+   neutralisées. Le prompt interdit de suivre une instruction qui s'y trouve.
+2. Le **code** détecte les tentatives d'injection (« ignore tes consignes », « liste des
+   clients », « system prompt »…). Un email suspect **n'est jamais montré au modèle** : il est
+   transmis directement à un conseiller.
+3. Le code repère aussi les sujets hors périmètre (réclamation, négociation de loyer, litige,
+   vente) et les signale à l'agent, qui transmet la demande.
+4. L'agent n'a de toute façon accès à aucune donnée client : seuls le catalogue et les agendas
+   lui sont exposés.
+
+**Ton de l'agence** : français, vouvoiement, biens avec identifiant, quartier, nombre de pièces
+et loyer, puis les créneaux libres proposés, et une signature ajoutée par le code. Voir
+[agent/prompts.py](agent/prompts.py).
+
+**Jeu de test** : [evaluation/emails/ex4_emails.json](evaluation/emails/ex4_emails.json)
+contient 5 demandes (dont une en wolof), une négociation de loyer et une tentative d'injection,
+avec la décision attendue pour chacune. Pour le critère d'acceptation, une autre équipe envoie
+ces emails au compte de test, puis on lance `python -m agent.main boite`.
+
 ## Tests
 
 ```bash
 pytest -q
 ```
+
+- **Exercice 4**, avec un faux Gmail : brouillon dans le bon fil, envoi seulement après
+  validation, injection transmise sans passer par le modèle, demande hors périmètre transmise.
+- **Traitement de bout en bout des 7 emails** : 5 brouillons, aucun envoi, aucun email traité
+  deux fois.
 
 - **Catalogue et serveur MCP** : testés avec un vrai client MCP.
 - **Boucle de l'agent** : testée avec un modèle simulé (traces, erreur d'outil, limite d'étapes).
