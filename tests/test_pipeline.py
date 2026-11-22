@@ -1,6 +1,6 @@
 """Pipeline (ex 5) avec faux Gmail, faux Calendar, vrai serveur MCP et modele simule."""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytest
 
@@ -137,3 +137,22 @@ def test_choix_ambigu_tranche_par_le_modele(monde):
     repondre(monde, mid, "Celui de la fin, ça m'arrange.")
     [suite] = p.passe()
     assert suite.decision == "visite_creee" and suite.creneaux == [premier.creneaux[2]]
+
+def test_creneau_pris_entre_temps_nouveaux_creneaux_proposes(monde):
+    mid = monde["gmail"].recevoir("Aminata Fall <aminata@client.test>", "Visite F3 Mermoz", DEMANDE)
+    conseiller = Conseiller(True, True)
+    p = pipeline(monde, conseiller)
+    [premier] = p.passe()
+    pris = datetime.fromisoformat(premier.creneaux[0])
+    # un autre client reserve ce creneau avant que notre client ne reponde
+    monde["cal"].insert("awa@cal", {"id": "autre", "summary": "Visite SK-004",
+                                    "start": {"dateTime": pris.isoformat()},
+                                    "end": {"dateTime": (pris + timedelta(minutes=45)).isoformat()}}).execute()
+    repondre(monde, mid, "Le premier créneau me va.")
+
+    [suite] = p.passe()
+    assert suite.decision == "creneau_pris" and suite.etat == "creneaux_proposes"
+    assert conseiller.questions == ["Envoyer l'email au client", "Envoyer l'email au client"]
+    assert premier.creneaux[0] not in suite.creneaux and suite.creneaux
+    assert len(monde["cal"].actifs("awa@cal")) == 1                # seulement l'autre visite
+    assert "vient malheureusement d'etre reserve" in monde["gmail"].envois[1]["mime"].get_content()
