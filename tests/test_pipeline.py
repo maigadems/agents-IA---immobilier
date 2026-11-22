@@ -207,3 +207,14 @@ def test_demande_incomplete_question_puis_suite_avec_l_historique(monde):
     assert suite.etape == "suite" and suite.etat == "creneaux_proposes"
     assert suite.biens and set(suite.biens) <= {"SK-005", "SK-006"}
     assert "Echanges precedents" in vues[-1] and "je cherche un duplex" in vues[-1]
+
+def test_le_modele_recoit_la_date_du_pipeline(monde):
+    vues = []
+
+    def espion(messages, info):
+        vues.append(info.instructions)
+        return secretaire().function(messages, info)
+    from pydantic_ai.models.function import FunctionModel
+    monde["gmail"].recevoir("a@client.test", "Visite", DEMANDE)
+    pipeline(monde, Conseiller(True), modele=FunctionModel(espion)).passe()
+    assert "lundi 23/11/2026 08:00" in vues[0]
