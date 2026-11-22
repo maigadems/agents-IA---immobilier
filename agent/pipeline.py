@@ -54,6 +54,7 @@ Demande incomplete : brouillon avec 1 ou 2 questions precises. Hors perimetre :
 `transmettre_conseiller`, sans brouillon. N'envoie rien toi-meme."""
 
 ACTION_ENVOI = "Envoyer l'email au client"
+MAX_TENTATIVES = 3
 
 
 @dataclass
@@ -120,10 +121,14 @@ class Pipeline:
         nb_validations = len(self.validation.journal)
         conv = self.etat.get(demande["thread_id"]) or Conversation(
             demande["thread_id"], demande["client_email"], demande["client_nom"])
-        if conv.etat == "creneaux_proposes" and demande["statut"] != "transmis_automatiquement":
-            bilan = self._suite(demande, conv)
-        else:
-            bilan = self._nouvelle(demande, conv)
+        try:
+            if conv.etat == "creneaux_proposes" and demande["statut"] != "transmis_automatiquement":
+                bilan = self._suite(demande, conv)
+            else:
+                bilan = self._nouvelle(demande, conv)
+            conv.tentatives = 0
+        except Exception as exc:  # modele injoignable, serveur MCP arrete, API Google en erreur...
+            bilan = self._erreur(demande, conv, exc)
         # questions reellement posees au conseiller (les ecritures couvertes ne comptent pas)
         bilan.validations = sum(1 for v in self.validation.journal[nb_validations:]
                                 if "couvert_par" not in v)
@@ -293,6 +298,29 @@ class Pipeline:
         existant = self.agenda.service.events().get(calendarId=cal_id, eventId=visite["event_id"]).execute()
         prive = existant.get("extendedProperties", {}).get("private", {})
         return prive.get("client_email") == demande["client_email"] and prive.get("bien_id") == fiche["id"]
+
+    # --- sortie de route : erreur technique ------------------------------------------------
+    def _erreur(self, demande: dict, conv: Conversation, exc: Exception) -> Bilan:
+        """Le message reste "a traiter" et sera repris au prochain passage ; apres
+        MAX_TENTATIVES echecs, il est confie a un conseiller. L'etat de la conversation est garde."""
+        trace = Trace(self.config.dossier_traces, "erreur")
+        trace.ecrire({"type": "demande", "texte": f"{demande['objet']} ({demande['client_email']})"})
+        trace.ecrire({"type": "erreur", "message": f"{type(exc).__name__}: {exc}"})
+        bilan = Bilan(demande["message_id"], demande["thread_id"], demande["client_email"],
+                      demande["objet"], "suite" if conv.historique else "nouvelle_demande", "erreur",
+                      traces=[str(trace.chemin)], detail=f"{type(exc).__name__}: {exc}"[:300])
+        conv.tentatives += 1
+        if conv.tentatives >= MAX_TENTATIVES:
+            try:
+                self.boite.transmettre_conseiller(demande["message_id"], "erreurs techniques repetees")
+            except Exception:  # Gmail lui-meme indisponible : on reessaiera au prochain passage
+                self.etat.enregistrer(conv, conv.etat or "erreur", f"erreur : {bilan.detail}")
+                return bilan
+            self.etat.enregistrer(conv, "transmis", f"{conv.tentatives} erreurs : {bilan.detail}")
+            bilan.decision = "transmis"
+        else:
+            self.etat.enregistrer(conv, conv.etat or "erreur", f"erreur, nouvel essai prevu : {bilan.detail}")
+        return bilan
 
     # --- utilitaires ------------------------------------------------------------------
     def _historique(self, demande: dict) -> str:
