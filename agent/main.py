@@ -1,6 +1,7 @@
 """Point d'entree en ligne de commande.
 
     python -m agent.main demande "un F3 a Mermoz a moins de 400 000 F"
+    python -m agent.main surveiller          # pipeline complet en continu (ex 5)
     python -m agent.main trace traces/<fichier>.jsonl
 """
 
@@ -75,6 +76,65 @@ def cmd_boite(args: argparse.Namespace) -> int:
     return 0
 
 
+def _pipeline():
+    from agent.etat import EtatConversations
+    from agent.pipeline import construire_pipeline
+    from agent.tools.google_auth import service_calendar, service_gmail
+    from agent.tools.regles import agendas_conseillers
+
+    config = Config()
+    agendas = agendas_conseillers()
+    if not agendas:
+        raise SystemExit("CALENDAR_ID_CONSEILLER_* absents du .env : lancer scripts/creer_agendas.py")
+    return config, construire_pipeline(config, service_gmail(), service_calendar(), agendas,
+                                       Validation(), EtatConversations(config.fichier_etat))
+
+
+def _afficher(bilans) -> None:
+    for b in bilans:
+        print(f"- {b.client_email:30} {b.objet[:35]:35} {b.etape:16} -> {b.decision:24} [{b.etat}]")
+        for t in b.traces:
+            print(f"    trace : {t}")
+
+
+def cmd_pipeline(args: argparse.Namespace) -> int:
+    """Un passage : chaque nouvel email (ou reponse de client) est traite jusqu'au bout."""
+    _, pipeline = _pipeline()
+    bilans = pipeline.passe(args.maximum)
+    if not bilans:
+        print("Aucun nouveau message.")
+    _afficher(bilans)
+    return 0
+
+
+def cmd_surveiller(args: argparse.Namespace) -> int:
+    """Demo du jury : la boite est relue en continu, le conseiller ne fait que valider."""
+    import time
+
+    config, pipeline = _pipeline()
+    intervalle = args.intervalle or config.intervalle_s
+    print(f"Surveillance de la boite toutes les {intervalle} s (Ctrl+C pour arreter).")
+    try:
+        while True:
+            _afficher(pipeline.passe(args.maximum))
+            time.sleep(intervalle)
+    except KeyboardInterrupt:
+        print("\nArret de la surveillance.")
+    return 0
+
+
+def cmd_conversations(args: argparse.Namespace) -> int:
+    from agent.etat import EtatConversations
+
+    conversations = EtatConversations(Config().fichier_etat).toutes()
+    if not conversations:
+        print("Aucune conversation enregistree.")
+    for c in conversations:
+        print(f"- {c.client_email:30} {c.etat:22} bien={c.bien_id or '-':7} "
+              f"visite={c.event_id or '-'}  ({len(c.historique)} etapes)")
+    return 0
+
+
 def cmd_trace(args: argparse.Namespace) -> int:
     print(resume_lisible(Path(args.fichier)))
     return 0
@@ -94,6 +154,18 @@ def main(argv: list[str] | None = None) -> int:
     p = sous.add_parser("boite", help="traite les demandes non lues de Gmail (ex 4)")
     p.add_argument("--maximum", type=int, default=10)
     p.set_defaults(func=cmd_boite)
+
+    p = sous.add_parser("pipeline", help="un passage du pipeline complet (ex 5)")
+    p.add_argument("--maximum", type=int, default=10)
+    p.set_defaults(func=cmd_pipeline)
+
+    p = sous.add_parser("surveiller", help="pipeline en continu : relit la boite regulierement (ex 5)")
+    p.add_argument("--intervalle", type=int, default=None, help="secondes entre deux lectures")
+    p.add_argument("--maximum", type=int, default=10)
+    p.set_defaults(func=cmd_surveiller)
+
+    p = sous.add_parser("conversations", help="etat de chaque conversation (ex 5)")
+    p.set_defaults(func=cmd_conversations)
 
     p = sous.add_parser("trace", help="affiche une trace de facon lisible")
     p.add_argument("fichier")
