@@ -47,4 +47,9 @@ class Config:
     # traces
     dossier_traces: Path = field(default_factory=lambda: _chemin(os.getenv("TRACES_DIR", "traces")))
 
-    timezone: str = field(default_factory=lambda: os.getenv("TIMEZONE", "Africa/Dakar"))
+    # pipeline (ex 5) : etat des conversations, indexe par fil Gmail
+    fichier_etat: Path = field(default_factory=lambda: _chemin(os.getenv("ETAT_FICHIER",
+                                                                          "etat/conversations.json")))
+    intervalle_s: int = field(default_factory=lambda: _entier("PIPELINE_INTERVALLE_S", 30))
+
+    timezone: str =field(default_factory=lambda: os.getenv("TIMEZONE", "Africa/Dakar"))

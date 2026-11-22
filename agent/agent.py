@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Callable
 
 from pydantic_ai import Agent, UsageLimitExceeded
 from pydantic_ai.models import Model
@@ -14,7 +16,7 @@ from agent.config import Config
 from agent.modele import construire_modele
 from agent.prompts import prompt_systeme
 from agent.tools.validation import Validation
-from agent.traces import Trace
+from agent.traces import Trace, evenements_depuis_messages
 
 
 @dataclass
@@ -27,6 +29,17 @@ class Resultat:
     duree_s: float = 0.0
     erreur: str | None = None
     outils_appeles: list[str] = field(default_factory=list)
+    # [{"outil", "arguments", "resultat", "ok"}] dans l'ordre : le pipeline y lit les creneaux
+    # proposes et le brouillon cree, sans avoir a relire le texte du modele
+    resultats_outils: list[dict] = field(default_factory=list)
+
+
+def resultats_des_outils(evenements: list[dict]) -> list[dict]:
+    """Associe chaque resultat (ou erreur) d'outil aux arguments de son appel."""
+    arguments = {e["id"]: e["arguments"] for e in evenements if e["type"] == "appel_outil"}
+    return [{"outil": e["outil"], "arguments": arguments.get(e["id"], {}),
+             "resultat": e.get("resultat", e.get("erreur")), "ok": e["type"] == "resultat_outil"}
+            for e in evenements if e["type"] in ("resultat_outil", "erreur_outil")]
 
 
 def construire_agent(
@@ -35,12 +48,17 @@ def construire_agent(
     modele: Model | None = None,
     avec_agenda: bool = False,
     avec_gmail: bool = False,
+    maintenant: Callable[[], datetime] | None = None,
 ) -> Agent:
-    """Agent pydantic-ai. `retries` = nombre de tentatives quand un outil renvoie une erreur."""
+    """Agent pydantic-ai. `retries` = nombre de tentatives quand un outil renvoie une erreur.
+
+    `maintenant` fixe la date donnee au modele (evaluation rejouable : "jeudi prochain" designe
+    toujours le meme jour) ; par defaut, la date reelle.
+    """
     return Agent(
         modele or construire_modele(config),
-        instructions=lambda: prompt_systeme(timezone=config.timezone, avec_agenda=avec_agenda,
-                                            avec_gmail=avec_gmail),
+        instructions=lambda: prompt_systeme(maintenant() if maintenant else None, timezone=config.timezone,
+                                            avec_agenda=avec_agenda, avec_gmail=avec_gmail),
         toolsets=toolsets,
         retries=config.retries_outils,
         name="agent-sama-ker",
@@ -77,7 +95,9 @@ def executer(
 
     duree = time.perf_counter() - debut
     messages = resultat.all_messages()
-    trace.ecrire_messages(messages)
+    evenements = evenements_depuis_messages(messages)
+    for evenement in evenements:
+        trace.ecrire(evenement)
     usage = resultat.usage
     outils = [p.tool_name for m in messages for p in getattr(m, "parts", [])
               if getattr(p, "part_kind", "") == "tool-call"]
@@ -97,4 +117,5 @@ def executer(
         tokens_sortie=usage.output_tokens,
         duree_s=duree,
         outils_appeles=outils,
+        resultats_outils=resultats_des_outils(evenements),
     )

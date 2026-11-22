@@ -15,7 +15,7 @@ Chacun ne travaille **que dans sa branche** et que dans **ses dossiers** :
 |---|---|
 | 1 | `data/`, `mcp_server/`, `agent/` (version initiale ex 1) |
 | 2 | `agent/tools/calendar.py`, `agent/tools/gmail.py`, `agent/tools/validation.py` |
-| 3 | `agent/` (pipeline ex 5), `evaluation/`, `traces/` |
+| 3 | `agent/pipeline.py`, `agent/etat.py`, `agent/choix_creneau.py`, `agent/interpretation.py`, `agent/courriers.py`, `agent/correctifs.py`, `evaluation/` (ex 6) |
 
 Toucher au dossier d'un autre ? On le prévient d'abord.
 
@@ -69,8 +69,19 @@ Pour travailler en parallèle sans s'attendre, on fixe les interfaces dès maint
   ([agent/tools/validation.py](agent/tools/validation.py)), appelée **par le code** avant toute
   écriture ; chaque décision est inscrite dans la trace.
 
-La Partie 3 (pipeline) réutilise `agent.boite.traiter_boite` et les mêmes outils. Elle ajoute la
-gestion de la confirmation du client et l'état de chaque conversation, en s'appuyant sur le fil Gmail.
+- **Pipeline (P3)** : [agent/pipeline.py](agent/pipeline.py).
+  - `construire_pipeline(config, service_gmail, service_calendar, agendas, validation, etat)`
+    renvoie un `Pipeline`, et `Pipeline.passe(maximum)` renvoie une liste de `Bilan`.
+  - Chaque `Bilan` donne la décision (`envoye`, `refuse`, `transmis`,
+    `transmis_automatiquement`, `visite_creee`, `creneau_pris` ou `erreur`), l'état de la
+    conversation, les biens et les créneaux, le nombre de validations, les appels d'outils,
+    les tokens, la durée et les traces.
+  - L'état est stocké par fil Gmail dans [agent/etat.py](agent/etat.py).
+  - La seconde validation est une question groupée : `Validation.accord_groupe(action, details, couvre)`.
+- **Évaluation (P3)** : `python evaluation/evaluer_ex6.py`.
+  - Toute correction tirée de l'évaluation est déclarée dans
+    [agent/correctifs.py](agent/correctifs.py) et conditionnée à `est_actif("<nom>")`, pour
+    que l'avant et l'après restent mesurables.
 
 ## Calendrier
 

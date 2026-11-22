@@ -123,6 +123,9 @@ def resume_lisible(chemin: Path) -> str:
             lignes.append(f"[reponse] {e['texte']}")
         elif t == "usage":
             lignes.append(f"[usage] {e}")
+        elif t == "interpretation":
+            choix = e.get("statut") or e.get("intention")
+            lignes.append(f"  [interpretation par le {e['source']}] {choix} {e.get('creneau') or ''}".rstrip())
         elif t == "erreur":
             lignes.append(f"[erreur] {e['message']}")
     return "\n".join(lignes)

@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import json
 import sys
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Callable
+from typing import Callable, Iterator
 
 from agent.traces import Trace
 
@@ -43,17 +44,42 @@ class Validation:
     trace: Trace | None = None
     journal: list[dict] = field(default_factory=list)
 
+    _couvertes: list[str] = field(default_factory=list, repr=False)
+    _groupe: str | None = field(default=None, repr=False)
+
     def demander(self, action: str, details: dict) -> bool:
-        try:
-            accord = bool(self.decideur(action, details))
-        except (EOFError, KeyboardInterrupt):
-            accord = False
-        entree = {"type": "validation", "action": action, "accord": accord,
+        entree_groupe = {}
+        if action in self._couvertes:
+            # deja validee par le conseiller dans la question groupee en cours (une seule fois)
+            self._couvertes.remove(action)
+            accord, entree_groupe = True, {"couvert_par": self._groupe}
+        else:
+            try:
+                accord = bool(self.decideur(action, details))
+            except (EOFError, KeyboardInterrupt):
+                accord = False
+        entree = {"type": "validation", "action": action, "accord": accord, **entree_groupe,
                   "details": details, "horodatage_decision": datetime.now().isoformat(timespec="seconds")}
         self.journal.append(entree)
         if self.trace:
             self.trace.ecrire(entree)
         return accord
+
+    @contextmanager
+    def accord_groupe(self, action: str, details: dict, couvre: tuple[str, ...]) -> Iterator[bool]:
+        """Une seule question au conseiller pour plusieurs ecritures liees (ex 5).
+
+        Exemple : "creer la visite ET envoyer la confirmation". Si le conseiller accepte, chaque
+        action de `couvre` est accordee une seule fois dans le bloc, puis tout redevient soumis
+        a validation. S'il refuse, rien n'est couvert : les ecritures du bloc seront refusees.
+        """
+        accord = self.demander(action, {**details, "ecritures": list(couvre)})
+        if accord:
+            self._couvertes, self._groupe = list(couvre), action
+        try:
+            yield accord
+        finally:
+            self._couvertes, self._groupe = [], None
 
 
 def toujours(reponse: bool) -> Decideur:

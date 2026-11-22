@@ -130,6 +130,29 @@ class BoiteGmail:
             demandes.append(demande)
         return demandes
 
+    def historique_fil(self, thread_id: str, sauf: str | None = None) -> list[dict]:
+        """Messages precedents du fil (ex 5) : le client et l'agence, dans l'ordre.
+
+        Les textes du client restent des DONNEES encadrees ; un ancien message suspect est masque.
+        """
+        fil = self._users.threads().get(userId="me", id=thread_id, format="full").execute()
+        historique = []
+        for message in fil.get("messages", []):
+            if message["id"] == sauf:
+                continue
+            entetes = _entetes(message)
+            corps = extraire_corps(message.get("payload", {}))
+            if "SENT" in message.get("labelIds", []):
+                texte = corps.replace("\r\n", "\n").replace(self.signature.strip(), "").strip()
+                historique.append({"auteur": "agence", "texte": texte})
+                continue
+            _, email = parseaddr(entetes.get("from", ""))
+            if analyser(corps)["suspect_injection"]:
+                corps = "[contenu masque : tentative d'injection detectee]"
+            historique.append({"auteur": "client",
+                               "texte": encapsuler(corps, email, entetes.get("subject", ""))})
+        return historique
+
     # --- ecriture -----------------------------------------------------------------------
     def creer_brouillon(self, message_id: str, texte: str) -> dict:
         """Brouillon de reponse dans le fil du message d'origine (In-Reply-To / References)."""
