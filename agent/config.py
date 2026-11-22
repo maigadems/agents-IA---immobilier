@@ -10,6 +10,8 @@ from dotenv import load_dotenv
 
 RACINE = Path(__file__).resolve().parent.parent
 load_dotenv(RACINE / ".env")
+# pas de banniere publicitaire de pydantic-ai : nos traces suffisent
+os.environ.setdefault("PYDANTIC_AI_NO_BANNER", "1")
 
 
 def _chemin(valeur: str) -> Path:

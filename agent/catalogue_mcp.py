@@ -20,7 +20,7 @@ SCRIPT_SERVEUR = RACINE / "mcp_server" / "mcp_server.py"
 
 def toolset_catalogue(config: Config) -> MCPToolset:
     if config.mcp_catalogue == "stdio":
-        env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
+        env = {**os.environ, "PYTHONIOENCODING": "utf-8", "FASTMCP_LOG_LEVEL": "WARNING"}
         transport = PythonStdioTransport(
             SCRIPT_SERVEUR,
             args=["--transport", "stdio"],
