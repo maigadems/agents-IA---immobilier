@@ -41,7 +41,12 @@ agent/
   catalogue_mcp.py    client MCP du catalogue (stdio ou HTTP)
   traces.py           traces JSON Lines
   boite.py            traitement de la boîte Gmail, un email à la fois
-  main.py             ligne de commande : demande, boite, trace
+  pipeline.py         pipeline complet (ex 5) : de l'email à la visite, deux validations
+  etat.py             état de chaque conversation, par fil Gmail
+  choix_creneau.py    créneau choisi dans la réponse du client (sans modèle)
+  interpretation.py   interprétation de la réponse par le modèle, créneau vérifié
+  courriers.py        emails de confirmation et de nouveaux créneaux, écrits par le code
+  main.py             ligne de commande : demande, boite, pipeline, surveiller, conversations, trace
   tools/
     google_auth.py    OAuth, scopes minimaux
     regles.py         règles de visite de l'agence
@@ -230,6 +235,82 @@ et loyer, puis les créneaux libres proposés, et une signature ajoutée par le 
 contient 5 demandes (dont une en wolof), une négociation de loyer et une tentative d'injection,
 avec la décision attendue pour chacune. Pour le critère d'acceptation, une autre équipe envoie
 ces emails au compte de test, puis on lance `python -m agent.main boite`.
+
+## Pipeline complet (Ex 5)
+
+```bash
+python -m agent.main surveiller          # relit la boîte toutes les 30 s ; le conseiller valide
+python -m agent.main pipeline            # un seul passage
+python -m agent.main conversations       # état de chaque conversation
+```
+
+Pour la démo, on lance `surveiller` dans un terminal et on ne touche plus à rien. Le
+conseiller ne fait que répondre `o`/`N` aux deux questions de validation.
+
+```
+email du client ──► code : lecture, détection d'injection / hors périmètre
+   (nouveau fil)        │
+                        ▼
+                    modèle : besoin → rechercher_biens → lister_creneaux_libres → creer_brouillon
+                        │
+                        ▼
+                    VALIDATION 1 (conseiller) : relit le brouillon ──► envoi ──► état « creneaux_proposes »
+
+réponse du client ─► code : quel créneau ? (heure, jour, rang ; sinon modèle d'interprétation)
+   (même fil)           │
+                        ▼
+                    créneau encore libre ? ── non ──► nouveaux créneaux (brouillon → validation → envoi)
+                        │ oui
+                        ▼
+                    VALIDATION 2 (conseiller) : visite + email de confirmation, en une seule question
+                        │
+                        ▼
+                    événement dans l'agenda (adresse du catalogue) + confirmation envoyée
+                    ──► état « visite_confirmee »
+```
+
+**Répartition des rôles** ([agent/pipeline.py](agent/pipeline.py)) :
+
+- Le **modèle** comprend le besoin, cherche les biens et les créneaux, et rédige le premier
+  brouillon. Il ne voit que des outils de lecture, plus `creer_brouillon` et
+  `transmettre_conseiller` : `envoyer_brouillon` et `creer_visite` ne lui sont pas proposés.
+- Le **code** envoie, inscrit la visite et écrit l'email de confirmation à partir de la fiche
+  du catalogue et de l'agenda ([agent/courriers.py](agent/courriers.py)). Il le fait toujours
+  après validation.
+- La **validation 2** est une question groupée (`Validation.accord_groupe`). Le conseiller
+  voit en une seule fois la visite et l'email de confirmation, et son accord couvre ces deux
+  écritures, une seule fois chacune.
+
+**État des conversations** ([agent/etat.py](agent/etat.py)) : un état par fil Gmail
+(`threadId`), enregistré dans `etat/conversations.json` (hors Git). Il contient le bien, le
+conseiller, les créneaux proposés, le brouillon, la visite et l'historique des étapes. Quand
+le client répond, sa réponse arrive dans le même fil : le pipeline sait alors ce qui lui a été
+proposé. Le modèle reçoit aussi les échanges précédents du fil, toujours encadrés comme des
+données.
+
+| État | Signification |
+|---|---|
+| `brouillon_en_attente` | réponse prête, envoi pas encore validé |
+| `creneaux_proposes` | réponse envoyée, on attend le choix du client |
+| `attente_precisions` | réponse envoyée avec des questions (demande incomplète) |
+| `visite_confirmee` | visite dans l'agenda et confirmation envoyée |
+| `transmis` | confié à un conseiller |
+| `erreur` | erreur technique, nouvel essai au prochain passage |
+
+**Sorties de route** :
+
+| Situation | Comportement |
+|---|---|
+| Outil ou modèle en erreur | Le message reste « à traiter » et l'état est conservé : nouvel essai au passage suivant. Après 3 échecs, il est transmis à un conseiller. |
+| Créneau pris entre-temps | Vérifié avant de déranger le conseiller (et de nouveau au moment d'écrire). Le client reçoit, après validation, 3 nouveaux créneaux libres. |
+| Demande incomplète | Brouillon avec 1 ou 2 questions ; la réponse du client est traitée avec tout le fil en contexte. |
+| Hors périmètre / injection | Transmis à un conseiller, sans réponse ; l'injection n'est jamais montrée au modèle. |
+| Réponse ambiguë (« jeudi » alors que deux créneaux tombent un jeudi) | Le modèle d'interprétation tranche ; un créneau qu'il inventerait est ignoré. Sinon, une nouvelle réponse est rédigée. |
+| Conseiller qui refuse | Rien n'est écrit. Un envoi refusé laisse le brouillon dans Gmail ; une visite refusée est transmise à un conseiller. |
+
+Chaque traitement a sa trace : `pipeline` pour le premier passage, `confirmation` pour la
+réponse du client, `erreur` en cas de panne. On y retrouve les appels d'outils, les
+interprétations et les validations.
 
 ## Tests
 
