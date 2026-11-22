@@ -27,6 +27,7 @@ from agent.agent import construire_agent, executer  # noqa: E402
 from agent.catalogue_mcp import toolset_catalogue  # noqa: E402
 from agent.config import Config  # noqa: E402
 from mcp_server.catalogue import DB_DEFAUT, creer  # noqa: E402
+from pydantic_ai.exceptions import ModelConnectionError  # noqa: E402
 
 MOTIF_ID = re.compile(r"\bSK-\d{3}\b", re.IGNORECASE)
 MOTS_AUCUN = ("aucun", "pas de bien", "ne correspond", "pas disponible", "aucune")
@@ -76,7 +77,13 @@ def main() -> int:
 
     lignes, reussites = [], 0
     for d in demandes:
-        r = executer(agent, d["demande"], config, libelle=f"ex1-{d['id']}")
+        try:
+            r = executer(agent, d["demande"], config, libelle=f"ex1-{d['id']}")
+        except ModelConnectionError:
+            print(f"Modele injoignable ({config.fournisseur}, {config.base_url or 'http://localhost:11434/v1'}).\n"
+                  "Lancez Ollama (`ollama serve` puis `ollama pull <modele>`) ou renseignez une API "
+                  "dans .env (copie de .env.example).", file=sys.stderr)
+            return 2
         verdict = evaluer(r.texte, d["attendus"], base)
         reussites += verdict["ok"]
         lignes.append({**d, **verdict, "reponse": r.texte, "trace": r.trace,
