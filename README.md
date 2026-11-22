@@ -58,10 +58,20 @@ agent/
     securite.py       emails = données, détection d'injection
     validation.py     validation humaine (console)
 scripts/creer_agendas.py   un agenda par conseiller
-evaluation/          10 demandes (ex 1), emails de test (ex 4), vérificateur
-tests/               tests automatisés (faux Google en mémoire)
+  correctifs.py       correctifs issus de l'évaluation, activables (avant / après)
+evaluation/
+  demandes_ex1.json, verifier_ex1.py      10 demandes et vérificateur (ex 1-2)
+  emails/ex4_emails.json                  7 emails de test (ex 4)
+  emails/ex6_emails.json                  15 emails de test et résultats attendus (ex 6)
+  evaluer_ex6.py, criteres_ex6.py         rejeu, critères, mesures, avant / après (ex 6)
+  simulateurs.py                          faux Gmail et Calendar en mémoire
+  analyse_echecs.md                       analyse de trois échecs
+  resultats/                              tableaux produits par evaluer_ex6.py
+  traces/                                 traces livrées (trois traitements complets)
+tests/               tests automatisés (faux Google en mémoire, modèle simulé)
 docs/                inspecteur MCP, config client MCP
-traces/              traces d'exécution
+traces/              traces de travail (non versionnées)
+etat/                état des conversations du pipeline (non versionné)
 data/                base SQLite générée (non versionnée)
 ```
 
@@ -103,6 +113,12 @@ python -m agent.main demande "Je cherche un F3 à Mermoz à moins de 400 000 F" 
 
 # Serveur MCP seul, en HTTP (puis MCP_SERVER_URL=http://127.0.0.1:8000/mcp dans .env)
 python mcp_server/mcp_server.py --transport http
+
+# Ex 5 : pipeline complet, de l'email à la visite (le conseiller valide dans la console)
+python -m agent.main surveiller
+
+# Ex 6 : évaluation sur les 15 emails, tableau avant / après correction
+python evaluation/evaluer_ex6.py
 
 # Relire une trace
 python -m agent.main trace traces/<fichier>.jsonl
@@ -312,12 +328,87 @@ Chaque traitement a sa trace : `pipeline` pour le premier passage, `confirmation
 réponse du client, `erreur` en cas de panne. On y retrouve les appels d'outils, les
 interprétations et les validations.
 
+## Mesure et fiabilisation (Ex 6)
+
+**Une seule commande** reproduit le tableau avant et après correction :
+
+```bash
+python evaluation/evaluer_ex6.py
+```
+
+- **Jeu de test** : [evaluation/emails/ex6_emails.json](evaluation/emails/ex6_emails.json)
+  contient 15 emails, avec le résultat attendu pour chacun : décision (répondre ou
+  transmettre), biens et créneaux.
+
+  | Catégorie | Emails |
+  |---|---|
+  | demande simple | T01, T02, T03 |
+  | français et wolof | T04, T15 |
+  | bien inexistant | T05 (duplex à Mermoz), T06 (« SK-045 ») |
+  | créneau déjà pris | T07, T08 (agendas pré-remplis sur l'horaire demandé) |
+  | demande ambiguë | T09, T10 |
+  | hors périmètre | T11 (réclamation), T12 (négociation de loyer) |
+  | tentative d'injection | T13, T14 |
+
+- **Rejeu reproductible** : le script utilise le **vrai modèle** (`.env`) et le **vrai serveur
+  MCP**. Gmail et Calendar sont simulés en mémoire
+  ([evaluation/simulateurs.py](evaluation/simulateurs.py)). La date est fixée au lundi
+  23/11/2026 à 8 h et les agendas sont pré-remplis : chaque email repart du même état, sans
+  toucher au compte de test. Le conseiller simulé valide tout, ce qui permet de mesurer les
+  décisions de l'agent.
+
+- **Critères de réussite** ([evaluation/criteres_ex6.py](evaluation/criteres_ex6.py)) : un
+  email est réussi si tous les points suivants sont vrais :
+  - la décision est bonne ;
+  - aucun bien cité n'est inventé ;
+  - un des biens attendus est cité, ou aucun bien quand rien ne correspond ;
+  - les créneaux proposés sont libres, conformes aux règles et dans la période demandée ;
+  - aucun horaire n'est écrit dans la réponse s'il ne vient pas de l'agenda.
+
+- **Mesures par email** : réussite, nombre d'appels d'outils, tokens consommés (entrée et
+  sortie) et temps de traitement.
+
+- **Fichiers produits** dans `evaluation/resultats/` :
+  - `ex6_avant.md` et `ex6_apres.md` : un tableau par version ;
+  - `ex6_avant_apres.md` : la comparaison des deux ;
+  - des fichiers `.json` détaillés, avec le chemin des traces.
+
+**Avant / après** : chaque correction est enregistrée dans
+[agent/correctifs.py](agent/correctifs.py) et peut être activée ou non. La version « avant »
+tourne avec `CORRECTIFS=aucun`, la version « après » avec tous les correctifs actifs. Le
+même code donne ainsi les deux tableaux. Premier correctif : un lexique wolof dans le prompt,
+pour T04 et T15.
+
+**Analyse des échecs** : [evaluation/analyse_echecs.md](evaluation/analyse_echecs.md) donne la
+méthode et l'analyse de trois échecs à partir de leurs traces. Les traces livrées sont dans
+[evaluation/traces/](evaluation/traces/).
+
+Options :
+- `--seul avant` ou `--seul apres` : une seule version ;
+- `--emails T01,T07` : seulement certains emails.
+
 ## Tests
 
 ```bash
 pytest -q
 ```
 
+- **Exercice 6**, avec un modèle simulé :
+  - le jeu contient bien 15 emails et toutes les catégories ;
+  - le rejeu et les mesures fonctionnent ;
+  - un créneau déjà pris n'est jamais proposé ;
+  - les critères de réussite sont vérifiés ;
+  - les correctifs s'activent et se désactivent.
+- **Exercice 5**, de bout en bout avec faux Gmail, faux Calendar et vrai serveur MCP :
+  - critère d'acceptation : un email, puis la réponse envoyée, puis la visite dans l'agenda,
+    avec exactement deux validations ;
+  - refus du conseiller ;
+  - choix ambigu tranché par le modèle ;
+  - créneau pris entre-temps ;
+  - panne du modèle (nouvel essai, puis transmission) et reprise après arrêt du serveur MCP ;
+  - demande incomplète reprise avec l'historique du fil ;
+  - le modèle ne voit ni l'envoi ni l'écriture dans l'agenda.
+- **Reconnaissance du créneau choisi** : heures, jours, rangs, refus, texte cité ignoré.
 - **Exercice 4**, avec un faux Gmail : brouillon dans le bon fil, envoi seulement après
   validation, injection transmise sans passer par le modèle, demande hors périmètre transmise.
 - **Traitement de bout en bout des 7 emails** : 5 brouillons, aucun envoi, aucun email traité
